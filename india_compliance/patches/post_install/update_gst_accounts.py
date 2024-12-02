@@ -12,8 +12,7 @@ def execute():
             "company",
             "cgst_account",
             "sgst_account",
-            "igst_account",
-            "is_reverse_charge_account",
+            "igst_account"
         ),
         ignore_ddl=True,
     )
