@@ -42,17 +42,15 @@ frappe.ui.form.on(DOCTYPE, {
                         ...filters,
                         supplied_items: get_supplied_items(doc),
                     },
-                }
-
+                };
             else if (row.link_doctype == "Subcontracting Receipt")
                 return {
                     query: "india_compliance.gst_india.overrides.subcontracting_transaction.get_subcontracting_receipt_references",
                     filters: {
                         ...filters,
                         received_items: get_received_items(doc),
-                    }
-                }
-
+                    },
+                };
         });
     },
     onload(frm) {
