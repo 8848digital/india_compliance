@@ -270,7 +270,7 @@ class GSTR3BReport(Document):
 
     def update_imports_from_bill_of_entry(self, itc_details):
         boe = frappe.qb.DocType("Bill of Entry")
-        boe_taxes = frappe.qb.DocType("Bill of Entry Taxes")
+        boe_taxes = frappe.qb.DocType("India Compliance Taxes and Charges")
 
         def _get_tax_amount(account_type):
             return (
@@ -295,6 +295,7 @@ class GSTR3BReport(Document):
                     & boe.docstatus.eq(1)
                     & boe_taxes.gst_tax_type.eq(account_type)
                 )
+                .where(boe_taxes.parenttype == "Bill of Entry")
                 .run()
             )[0][0] or 0
 
