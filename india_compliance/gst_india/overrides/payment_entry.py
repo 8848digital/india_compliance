@@ -442,7 +442,7 @@ def get_taxes_summary(company, payment_entries):
         .where(gl_entry.voucher_no.isin(references))
         .where(gl_entry.account.isin(gst_accounts))
         .where(gl_entry.company == company)
-        .groupby(gl_entry.voucher_no)
+        .groupby(gl_entry.voucher_no, pe.name)
         .run(as_dict=True)
     )
 
