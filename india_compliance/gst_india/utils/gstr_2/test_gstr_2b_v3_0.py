@@ -67,6 +67,7 @@ class TestGSTR2b(TestGSTRMixin, FrappeTestCase):
                         "cess": 0,
                     }
                 ],
+                "is_downloaded_from_2b": 1,
             },
             doc,
         )
@@ -107,6 +108,7 @@ class TestGSTR2b(TestGSTRMixin, FrappeTestCase):
                         "cess": 0,
                     }
                 ],
+                "is_downloaded_from_2b": 1,
             },
             doc,
         )
@@ -147,6 +149,7 @@ class TestGSTR2b(TestGSTRMixin, FrappeTestCase):
                         "cess": 0,
                     }
                 ],
+                "is_downloaded_from_2b": 1,
             },
             doc,
         )
@@ -185,6 +188,7 @@ class TestGSTR2b(TestGSTRMixin, FrappeTestCase):
                         "cess": 0,
                     }
                 ],
+                "is_downloaded_from_2b": 1,
             },
             doc,
         )
@@ -208,6 +212,7 @@ class TestGSTR2b(TestGSTRMixin, FrappeTestCase):
                 "cgst": 200,
                 "sgst": 200,
                 "cess": 0,
+                "is_downloaded_from_2b": 1,
             },
             doc,
         )
@@ -234,6 +239,7 @@ class TestGSTR2b(TestGSTRMixin, FrappeTestCase):
                 "cgst": 200,
                 "sgst": 200,
                 "cess": 0,
+                "is_downloaded_from_2b": 1,
             },
             doc,
         )
@@ -253,6 +259,7 @@ class TestGSTR2b(TestGSTRMixin, FrappeTestCase):
                 "taxable_value": 123.02,
                 "igst": 123.02,
                 "cess": 0.5,
+                "is_downloaded_from_2b": 1,
             },
             doc,
         )
@@ -274,6 +281,7 @@ class TestGSTR2b(TestGSTRMixin, FrappeTestCase):
                 "taxable_value": 123.02,
                 "igst": 123.02,
                 "cess": 0.5,
+                "is_downloaded_from_2b": 1,
             },
             doc,
         )
