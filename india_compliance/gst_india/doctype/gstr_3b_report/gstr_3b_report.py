@@ -562,7 +562,7 @@ class GSTR3BReport(Document):
     def get_reverse_charge_invoice_condition(self, doctype):
         condition = ""
         if doctype == "Sales Invoice" and self.reverse_charge_invoices:
-            condition = f""" and parent not in ({', '.join([f'"{invoice}"' for invoice in self.reverse_charge_invoices])})"""
+            condition = f""" and parent not in {tuple(self.reverse_charge_invoices)}"""
 
         return condition
 
