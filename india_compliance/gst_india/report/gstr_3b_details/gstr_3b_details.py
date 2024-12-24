@@ -451,7 +451,7 @@ class IneligibleITC:
         if ineligibility_reason == "Ineligible As Per Section 17(5)":
             query = query.where(dt_item.is_ineligible_for_itc == 1)
 
-        return query.groupby(dt[group_by]).run(as_dict=True)
+        return query.groupby(dt[group_by],dt.name).run(as_dict=True)
 
     def get_for_bill_of_entry(self, group_by="name"):
         doctype = "Bill of Entry"
