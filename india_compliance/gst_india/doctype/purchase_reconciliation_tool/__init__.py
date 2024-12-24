@@ -460,7 +460,7 @@ class PurchaseInvoice:
                 # Default to posting date if bill date is not available.
                 Case()
                 .when(
-                    self.PI.bill_date.isnull(),
+                    IfNull(self.PI.bill_date, "") == "",
                     self.PI.posting_date,
                 )
                 .else_(self.PI.bill_date)
@@ -718,6 +718,7 @@ class BaseReconciliation:
         ).get_all(additional_fields, names, only_names)
 
     def get_unmatched_bill_of_entry(self, category):
+        print(self.purchase_from_date)
         return BillOfEntry(
             company=self.company,
             company_gstin=self.company_gstin,
