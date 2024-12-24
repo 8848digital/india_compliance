@@ -718,7 +718,6 @@ class BaseReconciliation:
         ).get_all(additional_fields, names, only_names)
 
     def get_unmatched_bill_of_entry(self, category):
-        print(self.purchase_from_date)
         return BillOfEntry(
             company=self.company,
             company_gstin=self.company_gstin,
