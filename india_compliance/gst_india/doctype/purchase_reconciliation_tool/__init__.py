@@ -460,7 +460,7 @@ class PurchaseInvoice:
                 # Default to posting date if bill date is not available.
                 Case()
                 .when(
-                    self.PI.bill_date.isnull(),
+                    IfNull(self.PI.bill_date, "") == "",
                     self.PI.posting_date,
                 )
                 .else_(self.PI.bill_date)
