@@ -564,7 +564,13 @@ class BillOfEntry:
             .where(self.BOE.docstatus == 1)
             .where(IfNull(self.BOE.reconciliation_status, "") != "Not Applicable")
             .where(self.BOE_ITEM.parenttype == "Bill of Entry")
-            .groupby(self.BOE.name)
+            .groupby(self.BOE.name,
+                    self.PI.supplier_name,
+                    self.PI.is_reverse_charge,
+                    self.PI.gst_category,
+                    self.PI.supplier_gstin,
+                    self.PI.place_of_supply
+            )
             .select(*fields, ConstantColumn("Bill of Entry").as_("doctype"))
         )
 
