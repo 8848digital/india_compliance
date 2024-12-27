@@ -219,7 +219,11 @@ def get_items(filters):
 
         GROUP BY
             `tabSales Invoice Item`.parent,
-            `tabSales Invoice Item`.item_code
+            `tabSales Invoice Item`.item_code,
+            `tabSales Invoice Item`.gst_hsn_code,
+            `tabSales Invoice Item`.stock_uom,
+            `tabSales Invoice Item`.item_name,
+            `tabGST HSN Code`.description
         """,
         filters,
         as_dict=1,
