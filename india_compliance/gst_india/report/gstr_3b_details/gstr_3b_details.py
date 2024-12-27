@@ -423,7 +423,10 @@ class GSTR3B_Inward_Nil_Exempt(BaseGSTR3BDetails):
                     != IfNull(purchase_invoice.supplier_gstin, "")
                 )
             )
-            .groupby(purchase_invoice.name)
+            .groupby(
+                purchase_invoice.name,
+                purchase_invoice_item.gst_treatment
+            )
         )
 
         return query.run(as_dict=True)
