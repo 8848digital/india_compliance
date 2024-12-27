@@ -176,6 +176,11 @@ class GSTAdvanceDetail:
                 self.pe_ref.reference_name.as_("against_voucher"),
             )
             .where(self.gl_entry.debit_in_account_currency > 0)
+            .groupby(
+                self.pe_ref.allocated_amount,
+                self.pe_ref.reference_doctype,
+                self.pe_ref.reference_name
+            )
         )
 
         if self.filters.get("show_summary"):
@@ -206,6 +211,12 @@ class GSTAdvanceDetail:
                 self.pe.place_of_supply,
             )
             .where(Criterion.all(self.get_conditions()))
+            .groupby(
+                self.gl_entry.posting_date,
+                self.pe.name,
+                self.gl_entry.credit_in_account_currency,
+                self.gl_entry.voucher_no
+            )
         )
 
     def get_conditions(self):
