@@ -84,7 +84,7 @@ class Gstr1Report:
             company_gstin,
             (
                 CASE
-                    WHEN gst_category = "Unregistered" AND NULLIF(return_against, '') is not null
+                    WHEN gst_category = 'Unregistered' AND NULLIF(return_against, '') is not null
                     THEN (select base_grand_total from `tabSales Invoice` ra where ra.name = si.return_against)
                 END
             ) AS return_against_invoice_total
