@@ -124,7 +124,6 @@ class GSTR1Beta(Document):
         """
         Try to generate GSTR-1 data. Wrapper for generating GSTR-1 data
         """
-
         filters = frappe._dict(
             company=self.company,
             company_gstin=self.company_gstin,

@@ -164,7 +164,6 @@ class GSTReturnLog(GenerateGSTR1, FileGSTR1, Document):
     def has_all_files(self, settings=None):
         if not self.is_latest_data:
             return False
-
         file_fields = self.get_applicable_file_fields(settings)
         return all(getattr(self, file_field) for file_field in file_fields)
 
