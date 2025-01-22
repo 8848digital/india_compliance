@@ -174,7 +174,7 @@ frappe.ui.form.on(DOCTYPE, {
                         [`<a href='/app/error-log/${error_log}' class='variant-click'>error log</a>`]),
                     title: "GSTR-1 Download Failed",
                     indicator: "red",
-                })
+                });
             }
 
             frm.taxpayer_api_call("generate_gstr1", { only_books_data }).then(r => {
@@ -989,7 +989,7 @@ class TabManager {
                 showTotalRow: true,
                 checkboxColumn: false,
                 treeView: treeView,
-                noDataMessage: this.DEFAULT_NO_DATA_MESSAGE,
+                noDataMessage: this.get_no_data_message(),
                 headerDropdown: [
                     {
                         label: "Collapse All Node",
@@ -1033,7 +1033,6 @@ class TabManager {
                     },
                 },
             },
-            no_data_message: __("No data found"),
         });
 
         this.setup_datatable_listeners(treeView);
@@ -1185,6 +1184,10 @@ class TabManager {
         >
             <i class="fa fa-${icon}"></i>
         </button>`;
+    }
+
+    get_no_data_message() {
+        return this.DEFAULT_NO_DATA_MESSAGE;
     }
 }
 
@@ -2108,6 +2111,13 @@ class FiledTab extends GSTR1_TabManager {
             },
         ];
     }
+
+    get_no_data_message() {
+        if (this.instance.data?.is_nil)
+            return __("You have filed a Nil GSTR-1 for this period");
+
+        return this.DEFAULT_NO_DATA_MESSAGE;
+    }
 }
 
 class UnfiledTab extends FiledTab {
@@ -2126,8 +2136,6 @@ class UnfiledTab extends FiledTab {
 }
 
 class ReconcileTab extends FiledTab {
-    DEFAULT_NO_DATA_MESSAGE = __("No differences found");
-
     set_default_title() {
         if (this.instance.data.status === "Filed")
             this.DEFAULT_TITLE = "Books vs Filed";
@@ -2181,6 +2189,10 @@ class ReconcileTab extends FiledTab {
                 width: 150,
             },
         ];
+    }
+
+    get_no_data_message() {
+        return __("No differences found");
     }
 }
 
@@ -2894,11 +2906,18 @@ async function set_default_company_gstin(frm) {
 
 function set_options_for_year(frm) {
     const today = new Date();
-    const current_year = today.getFullYear();
+    let current_year = today.getFullYear();
+    const current_month_idx = today.getMonth();
     const start_year = 2017;
     const year_range = current_year - start_year + 1;
     let options = Array.from({ length: year_range }, (_, index) => start_year + index);
     options = options.reverse().map(year => year.toString());
+
+    if (
+        (frm.filing_frequency === "Monthly" && current_month_idx === 0) ||
+        (frm.filing_frequency === "Quarterly" && current_month_idx < 3)
+    )
+        current_year--;
 
     frm.get_field("year").set_data(options);
     frm.set_value("year", current_year.toString());
@@ -2945,7 +2964,7 @@ function set_options_for_month_or_quarter(frm) {
     }
 
     set_field_options("month_or_quarter", options);
-    if (frm.doc.year === current_year)
+    if (frm.doc.year === current_year && options.length > 1)
         // set second last option as default
         frm.set_value("month_or_quarter", options[options.length - 2]);
     // set last option as default
