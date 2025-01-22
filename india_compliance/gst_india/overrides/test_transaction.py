@@ -132,6 +132,25 @@ class TestTransaction(FrappeTestCase):
             {"account_head": "Input Tax CGST - _TIRC", "base_tax_amount": 900},
             doc.taxes[0],
         )
+        if doc.doctype == 'Purchase Invoice':
+            self.validate_gl_entries(doc)
+
+    def validate_gl_entries_for_pi_with_rcm_to_unregistered_supplier_TC_ACC_073(self, doc):
+        gl_entries = frappe.get_all(
+            "GL Entry",
+            filters={"voucher_no": doc.name},
+            fields=["account", "debit", "credit"]
+        )
+        expected_gl_entries = [
+            {"account": "Input Tax SGST RCM - _TIRC", "debit": 0.0, "credit": 900.0},
+            {"account": "Input Tax CGST RCM - _TIRC", "debit": 0.0, "credit": 900.0},
+            {"account": "Input Tax SGST - _TIRC", "debit": 900.0, "credit": 0.0},
+            {"account": "Input Tax CGST - _TIRC", "debit": 900.0, "credit": 0.0},
+            {"account": "Stock Received But Not Billed - _TIRC", "debit": 10000.0, "credit": 0.0},
+            {"account": "Creditors - _TIRC", "debit": 0.0, "credit": 10000.0},
+        ]
+        for expected_entry in expected_gl_entries:
+            self.assertIn(expected_entry, gl_entries, f"Expected GL Entry {expected_entry} not found in {gl_entries}")
 
     def test_rcm_transaction_with_returns(self):
         "Make sure RCM is not applied on Sales Return"
