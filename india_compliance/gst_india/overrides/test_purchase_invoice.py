@@ -59,6 +59,83 @@ class TestPurchaseInvoice(FrappeTestCase):
             pinv.save,
         )
 
+    def test_purchase_invoice_taxes_TC_ACC_075(self):
+        from india_compliance.gst_india.doctype.gst_hsn_code.gst_hsn_code import update_taxes_in_item_master
+        from frappe.utils import today
+        # Step 1: Create GST HSN Code with Taxes
+        taxes = [{"item_tax_template": "GST 18% - _TIRC", "tax_category": "In-State"}]
+        hsn_code = "100100"
+
+        # Create GST HSN Code
+        if not frappe.db.exists("GST HSN Code", hsn_code):
+            hsn_doc = frappe.get_doc(
+                {"doctype": "GST HSN Code", "hsn_code": hsn_code, "taxes": taxes}
+            )
+            hsn_doc.save()
+
+        # Create Item with GST HSN Code
+        item_code = "SKU8899"
+        if not frappe.db.exists("Item", item_code):
+            
+            item = frappe.get_doc(
+                {
+                    "doctype": "Item",
+                    "item_code": item_code,
+                    "item_group": "All Item Groups",
+                    "gst_hsn_code": hsn_code,
+                    "stock_uom": "Nos",
+                }
+            )
+            item.save()
+
+        # Update taxes in item master
+        update_taxes_in_item_master(taxes=taxes, hsn_code=hsn_code)
+
+        # Validate the item has correct tax template
+        self.assertDocumentEqual(taxes[0], frappe.get_doc("Item", item_code).taxes[0])
+
+        # Step 2: Setup Company and Vendor with GSTIN
+        company = "_Test Indian Registered Company"
+        vendor = "_Test Registered Supplier"
+
+        # Step 3: Create Purchase Invoice
+        purchase_invoice = frappe.new_doc("Purchase Invoice")
+        purchase_invoice.company = company
+        purchase_invoice.supplier = vendor
+        purchase_invoice.append(
+            "items",
+            {
+                "item_code": item_code,
+                "qty": 1,
+                "rate": 100,
+                "gst_hsn_code": hsn_code,
+            },
+        )
+        
+        taxes_and_charges = frappe.call(
+            "erpnext.accounts.party.get_party_details",
+            party=vendor,
+            party_type="Supplier",
+            account= "Creditors - _TIRC",
+            company=company,
+            posting_date = today()
+        ).get("taxes_and_charges")
+        # Set the taxes_and_charges in the Purchase Invoice
+        purchase_invoice.taxes_and_charges = taxes_and_charges
+        purchase_invoice.bill_no = "XXX-01"
+        purchase_invoice.save()
+        # Step 4: Validate Taxes in Purchase Invoice
+        taxes_in_invoice = purchase_invoice.get("taxes")
+        self.assertGreater(len(taxes_in_invoice), 0, "Taxes should be fetched for the Purchase Invoice.")
+
+        # # Validate tax accounts
+        for tax in taxes_in_invoice:
+            self.assertIn(
+                tax.account_head,
+                ["Input Tax CGST - _TIRC", "Input Tax SGST - _TIRC"],
+                "Tax account should match GST rules based on In-State or Out-State classification.",
+            )
+
     def test_validate_invoice_length(self):
         # No error for registered supplier
         pinv = create_purchase_invoice(
