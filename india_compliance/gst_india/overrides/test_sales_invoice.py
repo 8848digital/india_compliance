@@ -4,6 +4,7 @@ import frappe
 
 from india_compliance.gst_india.utils import validate_invoice_number
 from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
+from frappe.tests.utils import change_settings
 
 class TestSalesInvoice(unittest.TestCase):
     def test_validate_invoice_number(self):
@@ -35,6 +36,37 @@ class TestSalesInvoice(unittest.TestCase):
                 validate_invoice_number(doc)
             except frappe.ValidationError:
                 self.fail("Valid name {} throwing error".format(name))
+
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_sales_invoice_with_sez_customer_TC_ACC_074(self):
+        # Change customer GST category to SEZ
+        customer = frappe.get_doc("Customer", "_Test NC")
+        customer.gstin = "27AABCS4225M2Z6"
+        customer.gst_category = "SEZ"
+        customer.save()
+
+        # Create Sales Invoice
+        si = create_sales_invoice(
+            company="_Test Indian Registered Company",
+            customer="_Test NC",
+            warehouse="Stores - _TIRC",
+            cost_center="Main - _TIRC",
+            selling_price_list="Standard Selling",
+            income_account="Sales - _TIRC",
+            expense_account="Cost of Goods Sold - _TIRC",
+            debit_to="Debtors - _TIRC",
+            qty=4,
+            rate=5000,
+            do_not_save=True
+        )
+
+        si.save().submit()
+
+        # Assertions for Sales Invoice
+        self.assertEqual(si.status, "Unpaid", "Sales Invoice submission failed")
+        self.assertEqual(si.grand_total, si.total + si.total_taxes_and_charges, "Grand total calculation mismatch")
+        self.assertEqual(si.total_taxes_and_charges, 0, "Total tax amount mismatch for SEZ customer")
+
 
     def test_sales_invoice_with_gst_TC_ACC_076(self):
         # Create Sales Invoice
