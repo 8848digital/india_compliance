@@ -1,10 +1,10 @@
-.align-middle {
-    vertical-align: middle;
+
+.table-element {
+    font-size: 12px;
 }
 
-.print-format {
-    padding: 0.25in;
-    color: black;
+.bold {
+    font-weight: bold;
 }
 
 .no-border {
@@ -15,43 +15,14 @@
     border: none;
 }
 
-.attribute-value {
-    font-weight: bold;
+.print-format {
+    padding: 0.25in;
+    color: black;
 }
 
-.bold {
-    font-weight: bold;
-}
-
-.table-element {
-    font-size: 10px;
-}
-
-.table-element > .table-heading {
-    font-size: 13px;
-    font-weight: bold;
-}
-
-.table-heading {
-    font-size: 13px;
-    font-weight: bold;
-}
-
-thead > th {
-    background-color: white !important;
-}
-
-table,
-th,
-td {
+table, th, td {
     border: 1px solid black;
     border-collapse: collapse;
-}
-
-.table-element .border div {
-    border: 1px solid black !important;
-    width: 100%;
-    padding: 5px;
 }
 
 @media print {
@@ -62,8 +33,8 @@ td {
     }
 }
 
-.print-format tbody > tr > td,
-.print-format tbody > tr > th {
+.print-format tbody>tr>td,
+.print-format tbody>tr>th {
     padding: 6px !important;
     border-top: none;
     color: black;
