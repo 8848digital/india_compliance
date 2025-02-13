@@ -24,22 +24,3 @@ def set_gstr_actions(doc, request_type, token, request_id, status=None):
 
     doc.append("actions", row)
     doc.save()
-    enqueue_link_integration_request(token, request_id)
-
-
-def enqueue_link_integration_request(token, request_id):
-    """
-    Integration request is enqueued. Hence, it's name is not available immediately.
-    Hence, link it after the request is processed.
-    """
-    frappe.enqueue(
-        link_integration_request, queue="long", token=token, request_id=request_id
-    )
-
-
-def link_integration_request(token, request_id):
-    doc_name = frappe.db.get_value("Integration Request", {"request_id": request_id})
-    if doc_name:
-        frappe.db.set_value(
-            "GSTR Action", {"token": token}, {"integration_request": doc_name}
-        )

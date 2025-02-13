@@ -366,10 +366,12 @@ class TaxpayerBaseAPI(TaxpayerAuthenticate):
         params = {"gstin": self.company_gstin, **(kwargs.pop("params", {}))}
         return self._request("get", *args, **kwargs, params=params)
 
-    def post(self, *args, **kwargs):
+    def post(self, *args, **kwargs):   
+        self.default_log_values.update(update_gstr_action=True)
         return self._request("post", *args, **kwargs)
 
     def put(self, *args, **kwargs):
+        self.default_log_values.update(update_gstr_action=True)
         return self._request("put", *args, **kwargs)
 
     def before_request(self, request_args):
