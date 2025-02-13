@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import format_date
 
 from india_compliance.gst_india.api_classes.taxpayer_base import (
     TaxpayerBaseAPI,
@@ -96,6 +97,8 @@ class GSTInvoiceManagementSystem(Document):
 
         invoice_data = []
         for doc in inward_supplies:
+            _purchase_invoice = purchases.pop(doc.link_name, frappe._dict())
+
             invoice_data.append(
                 frappe._dict(
                     {
@@ -105,10 +108,11 @@ class GSTInvoiceManagementSystem(Document):
                         "is_pending_action_allowed": doc.is_pending_action_allowed,
                         "is_supplier_return_filed": doc.is_supplier_return_filed,
                         "doc_type": doc.doc_type,
-                        "_inward_supply": doc,
-                        "_purchase_invoice": purchases.pop(
-                            doc.link_name, frappe._dict()
+                        "posting_date": format_date(
+                            _purchase_invoice.pop("posting_date", None)
                         ),
+                        "_inward_supply": doc,
+                        "_purchase_invoice": _purchase_invoice,
                     }
                 )
             )
@@ -443,8 +447,8 @@ class BuildExcelIMS(BuildExcel):
             filters=self.filters,
             headers=self.invoice_header,
             data=self.data,
-            default_data_format={},
-            default_header_format={},
+            default_data_format={"horizontal": "center"},
+            default_header_format={"bg_color": self.COLOR_PALLATE.dark_gray},
         )
 
         excel.remove_sheet("Sheet")
@@ -473,48 +477,39 @@ class BuildExcelIMS(BuildExcel):
             {
                 "label": "Supplier Name",
                 "fieldname": "supplier_name",
-                "data_format": {"horizontal": "center"},
+                "header_format": {"width": 35},
             },
             {
                 "label": "Supplier GSTIN",
                 "fieldname": "supplier_gstin",
-                "data_format": {"horizontal": "center"},
             },
             {
                 "label": "Bill No",
                 "fieldname": "bill_no",
-                "data_format": {
-                    "horizontal": "center",
-                    "bg_color": self.COLOR_PALLATE.light_green,
-                },
             },
             {
                 "label": "Bill Date",
                 "fieldname": "bill_date",
-                "data_format": {
-                    "horizontal": "center",
-                    "bg_color": self.COLOR_PALLATE.light_blue,
-                },
             },
             {
                 "label": "Match Status",
                 "fieldname": "match_status",
-                "data_format": {"horizontal": "center"},
             },
             {
                 "label": "IMS Action",
                 "fieldname": "ims_action",
-                "data_format": {"horizontal": "center"},
             },
             {
                 "label": "Inward Supply Name",
                 "fieldname": "inward_supply_name",
-                "data_format": {"horizontal": "center"},
             },
             {
                 "label": "Linked Voucher",
                 "fieldname": "purchase_invoice_name",
-                "data_format": {"horizontal": "center"},
+            },
+            {
+                "label": "Posting Date",
+                "fieldname": "posting_date",
             },
             {
                 "label": "Taxable Amount Diff \n 2A/2B - Purchase",
@@ -523,7 +518,7 @@ class BuildExcelIMS(BuildExcel):
                 "data_format": {
                     "bg_color": self.COLOR_PALLATE.light_pink,
                     "number_format": "0.00",
-                    "horizontal": "center",
+                    "horizontal": "right",
                 },
             },
             {
@@ -533,13 +528,12 @@ class BuildExcelIMS(BuildExcel):
                 "data_format": {
                     "bg_color": self.COLOR_PALLATE.light_pink,
                     "number_format": "0.00",
-                    "horizontal": "center",
+                    "horizontal": "right",
                 },
             },
             {
                 "label": "Classification",
                 "fieldname": "classification",
-                "data_format": {"horizontal": "center"},
                 "header_format": {"width": 11},
             },
         ]
