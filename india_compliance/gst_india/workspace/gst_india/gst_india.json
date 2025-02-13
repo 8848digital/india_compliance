@@ -257,11 +257,7 @@
       "type": "Link"
      }
     ],
-   <<<<<<< HEAD
-    "modified": "2024-10-05 10:28:10.623892",
-   =======
     "modified": "2025-02-03 19:31:53.602397",
-   >>>>>>> c61c96be (feat: GSTIN Status report (#3011))
     "modified_by": "Administrator",
     "module": "GST India",
     "name": "GST India",
@@ -334,6 +330,5 @@
       "type": "DocType"
      }
     ],
-    "title": "GST India",
-    "type": "Workspace"
+    "title": "GST India"
    }
