@@ -12,7 +12,7 @@ from india_compliance.audit_trail.utils import (
 
 def setup_fixtures():
     create_custom_fields(CUSTOM_FIELDS)
-    if "Asset" in frappe.get_installed_apps():
+    if "assets" in frappe.get_installed_apps():
         create_property_setters_for_versioning()
 
 
@@ -37,5 +37,5 @@ def create_property_setters_for_versioning():
 
 
 def after_migrate():
-    if is_audit_trail_enabled() and "Asset" in frappe.get_installed_apps():
+    if is_audit_trail_enabled() and "assets" in frappe.get_installed_apps():
         create_property_setters_for_versioning()
