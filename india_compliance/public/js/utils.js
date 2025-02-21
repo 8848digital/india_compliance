@@ -46,6 +46,28 @@ Object.assign(india_compliance, {
         return [this.MONTH[month_number - 1], year];
     },
 
+    get_period(month_or_quarter, year) {
+        /**
+         * Returns the period in the format MMYYYY
+         * as accepted by the GST Portal
+         */
+
+        let month;
+
+        if (month_or_quarter.includes("-")) {
+            // Quarterly
+            const last_month = month_or_quarter.split("-")[1];
+            const date = new Date(`${last_month} 1, ${year}`);
+            month = String(date.getMonth() + 1).padStart(2, "0");
+        } else {
+            // Monthly
+            const date = new Date(`${month_or_quarter} 1, ${year}`);
+            month = String(date.getMonth() + 1).padStart(2, "0");
+        }
+
+        return `${month}${year}`;
+    },
+    
     get_gstin_query(party, party_type = "Company") {
         if (!party) {
             frappe.show_alert({
@@ -86,16 +108,16 @@ Object.assign(india_compliance, {
         return in_list(frappe.boot.sales_doctypes, doctype) ? "Customer" : "Supplier";
     },
 
-    async set_gstin_status(field, transaction_date, force_update) {
+    async set_gstin_status(field, transaction_date, docstatus, force_update) {
         const gstin = field.value;
         if (!gstin || gstin.length !== 15) return field.set_description("");
 
-        const { message } = await frappe.call({
+        let { message } = await frappe.call({
             method: "india_compliance.gst_india.doctype.gstin.gstin.get_gstin_status",
-            args: { gstin, transaction_date, force_update },
+            args: { gstin, transaction_date, docstatus, force_update },
         });
 
-        if (!message) return field.set_description("");
+        if (!message) message = { status: "Not Available" };
 
         field.set_description(
             india_compliance.get_gstin_status_desc(
@@ -164,7 +186,11 @@ Object.assign(india_compliance, {
         const user_date = frappe.datetime.str_to_user(datetime);
         const pretty_date = frappe.datetime.prettyDate(datetime);
 
-        const STATUS_COLORS = { Active: "green", Cancelled: "red" };
+        const STATUS_COLORS = {
+            Active: "green",
+            Cancelled: "red",
+            "Not Available": "grey",
+        };
         return `<div class="d-flex indicator ${STATUS_COLORS[status] || "orange"}">
                     Status:&nbsp;<strong>${status}</strong>
                     <span class="text-right ml-auto gstin-last-updated">
@@ -195,6 +221,7 @@ Object.assign(india_compliance, {
             await india_compliance.set_gstin_status(
                 field,
                 transaction_date,
+                null,
                 force_update
             );
         });
