@@ -67,11 +67,7 @@
     ],
     "index_web_pages_for_search": 1,
     "links": [],
-   <<<<<<< HEAD
-    "modified": "2023-09-06 09:18:47.885426",
-   =======
     "modified": "2024-12-31 18:32:42.409478",
-   >>>>>>> 01bbdf96 (feat: GST Invoice Management System (IMS) Implementation (#2638))
     "modified_by": "Administrator",
     "module": "GST India",
     "name": "GSTR Import Log",
