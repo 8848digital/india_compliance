@@ -237,8 +237,10 @@ class GSTR3BReport(Document):
             FROM `tabPurchase Invoice`
             WHERE docstatus = 1
             and is_opening = 'No'
-            and company_gstin != IFNULL(supplier_gstin, "")
-            and month(posting_date) between %s and %s and year(posting_date) = %s and company = %s
+            and company_gstin != COALESCE(supplier_gstin, '')
+            and EXTRACT(MONTH FROM posting_date) BETWEEN %s AND %s
+            and EXTRACT(YEAR FROM posting_date) = %s
+            and company = %s
             and company_gstin = %s
             GROUP BY itc_classification
         """,
@@ -270,7 +272,7 @@ class GSTR3BReport(Document):
 
     def update_imports_from_bill_of_entry(self, itc_details):
         boe = frappe.qb.DocType("Bill of Entry")
-        boe_taxes = frappe.qb.DocType("Bill of Entry Taxes")
+        boe_taxes = frappe.qb.DocType("India Compliance Taxes and Charges")
 
         def _get_tax_amount(account_type):
             return (
@@ -295,6 +297,7 @@ class GSTR3BReport(Document):
                     & boe.docstatus.eq(1)
                     & boe_taxes.gst_tax_type.eq(account_type)
                 )
+                .where(boe_taxes.parenttype == "Bill of Entry")
                 .run()
             )[0][0] or 0
 
@@ -311,9 +314,10 @@ class GSTR3BReport(Document):
             FROM `tabPurchase Invoice` p , `tabPurchase Invoice Item` i
             WHERE p.docstatus = 1 and p.name = i.parent
             and p.is_opening = 'No'
-            and p.company_gstin != IFNULL(p.supplier_gstin, "")
+            and p.company_gstin != COALESCE(p.supplier_gstin, '')
             and (i.gst_treatment != 'Taxable' or p.gst_category = 'Registered Composition') and
-            month(p.posting_date) between %s and %s and year(p.posting_date) = %s
+            EXTRACT(MONTH FROM posting_date) BETWEEN %s AND %s
+            and EXTRACT(YEAR FROM posting_date) = %s
             and p.company = %s and p.company_gstin = %s
             """,
             (
@@ -561,7 +565,7 @@ class GSTR3BReport(Document):
     def get_reverse_charge_invoice_condition(self, doctype):
         condition = ""
         if doctype == "Sales Invoice" and self.reverse_charge_invoices:
-            condition = f""" and parent not in ({', '.join([f'"{invoice}"' for invoice in self.reverse_charge_invoices])})"""
+            condition = f""" and parent not in {tuple(self.reverse_charge_invoices)}"""
 
         return condition
 
@@ -687,9 +691,10 @@ class GSTR3BReport(Document):
                 f"""
                     SELECT name FROM `tab{doctype}`
                     WHERE docstatus = 1 and is_opening = 'No'
-                    and month(posting_date) between %s and %s and year(posting_date) = %s
+                    and EXTRACT(MONTH FROM posting_date) BETWEEN %s AND %s
+                    and EXTRACT(YEAR FROM posting_date) = %s
                     and company = %s and place_of_supply IS NULL
-                    and company_gstin != IFNULL({party_gstin},"")
+                    and company_gstin != COALESCE({party_gstin},'')
                     and gst_category != 'Overseas'
                 """,
                 (

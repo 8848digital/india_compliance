@@ -72,6 +72,7 @@ def update_taxable_values(doc):
     total_charges = 0
     apportioned_charges = 0
     tax_witholding_amount = 0
+    has_no_qty_value = False
 
     if doc.taxes:
         if any(
@@ -103,8 +104,10 @@ def update_taxable_values(doc):
     # base net total may be zero if invoice has zero rated items + shipping
     total_value = doc.base_net_total if doc.base_net_total else doc.total_qty
 
+    # credit note without item qty and value but with charges
     if not total_value:
-        return
+        total_value = len(doc.items)
+        has_no_qty_value = True
 
     for item in doc.items:
         item.taxable_value = item.base_net_amount
@@ -112,7 +115,12 @@ def update_taxable_values(doc):
         if not total_charges:
             continue
 
-        proportionate_value = item.base_net_amount if doc.base_net_total else item.qty
+        if has_no_qty_value:
+            proportionate_value = 1
+        elif doc.base_net_total:
+            proportionate_value = item.base_net_amount
+        else:
+            proportionate_value = item.qty
 
         applicable_charges = flt(
             proportionate_value * (total_charges / total_value),
@@ -498,7 +506,7 @@ class GSTAccounts:
                 )
 
             if row.charge_type == "On Previous Row Total":
-                previous_row_references.add(row.row_id)
+                previous_row_references.add(flt(row.row_id))
 
             # validating charge type "On Item Quantity" and non_cess_advol_account
             self.validate_charge_type_for_cess_non_advol_accounts(row)
@@ -600,13 +608,14 @@ def validate_items(doc, throw):
 
         has_gst_items = True
 
+        item_key = row.item_code or row.item_name
         # Different Item Tax Templates should not be used for the same Item Code
-        if row.item_code not in item_tax_templates:
-            item_tax_templates[row.item_code] = row.item_tax_template
+        if item_key not in item_tax_templates:
+            item_tax_templates[item_key] = row.item_tax_template
             continue
 
-        if row.item_tax_template != item_tax_templates[row.item_code]:
-            items_with_duplicate_taxes.append(bold(row.item_code))
+        if row.item_tax_template != item_tax_templates[item_key]:
+            items_with_duplicate_taxes.append(bold(item_key))
 
     if not has_gst_items:
         update_taxable_values(doc)
@@ -771,9 +780,13 @@ def _validate_hsn_codes(doc, valid_hsn_length, throw=False, message=None):
         frappe.throw(
             _(
                 "{0}"
-                "Please enter a valid HSN/SAC code for the following row numbers:"
-                " <br>{1}"
-            ).format(message or "", frappe.bold(", ".join(rows_with_invalid_hsn))),
+                "HSN/SAC must exist and should be {1} digits long"
+                " for the following row numbers: <br>{2}"
+            ).format(
+                message or "",
+                join_list_with_custom_separators(valid_hsn_length),
+                frappe.bold(", ".join(rows_with_invalid_hsn)),
+            ),
             title=_("Invalid HSN/SAC"),
         )
 
@@ -999,11 +1012,12 @@ def get_gst_details(party_details, doctype, company, *, update_place_of_supply=F
             gst_details.update(party_gst_details)
 
     # POS
-    gst_details.place_of_supply = (
-        party_details.place_of_supply
-        if (not update_place_of_supply and party_details.place_of_supply)
-        else get_place_of_supply(party_details, doctype)
-    )
+    if not update_place_of_supply and party_details.place_of_supply:
+        gst_details.place_of_supply = party_details.place_of_supply
+    else:
+        place_of_supply = get_place_of_supply(party_details, doctype)
+        gst_details.place_of_supply = place_of_supply
+        party_details.place_of_supply = place_of_supply
 
     # set is_reverse_charge as per party_gst_details if not set
     if not is_sales_transaction and "is_reverse_charge" not in party_details:
@@ -1031,7 +1045,12 @@ def get_gst_details(party_details, doctype, company, *, update_place_of_supply=F
                 == party_details.get(party_gstin_field)
             )  # Internal transfer
         )
-        or (is_sales_transaction and is_export_without_payment_of_gst(party_details))
+        or (
+            is_sales_transaction
+            and is_export_without_payment_of_gst(
+                frappe._dict({**party_details, "doctype": doctype})
+            )
+        )
         or (
             not is_sales_transaction
             and (
@@ -1073,11 +1092,7 @@ def get_gst_details(party_details, doctype, company, *, update_place_of_supply=F
     if default_tax := get_tax_template(
         master_doctype,
         company,
-        is_inter_state_supply(
-            party_details.copy().update(
-                doctype=doctype, place_of_supply=gst_details.place_of_supply
-            ),
-        ),
+        is_inter_state_supply(frappe._dict({**party_details, "doctype": doctype})),
         party_details.get(company_gstin_field)[:2],
         party_details.is_reverse_charge,
     ):

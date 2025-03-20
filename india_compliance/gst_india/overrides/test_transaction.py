@@ -132,6 +132,25 @@ class TestTransaction(FrappeTestCase):
             {"account_head": "Input Tax CGST - _TIRC", "base_tax_amount": 900},
             doc.taxes[0],
         )
+        if doc.doctype == 'Purchase Invoice':
+            self.validate_gl_entries(doc)
+
+    def validate_gl_entries_for_pi_with_rcm_to_unregistered_supplier_TC_ACC_073(self, doc):
+        gl_entries = frappe.get_all(
+            "GL Entry",
+            filters={"voucher_no": doc.name},
+            fields=["account", "debit", "credit"]
+        )
+        expected_gl_entries = [
+            {"account": "Input Tax SGST RCM - _TIRC", "debit": 0.0, "credit": 900.0},
+            {"account": "Input Tax CGST RCM - _TIRC", "debit": 0.0, "credit": 900.0},
+            {"account": "Input Tax SGST - _TIRC", "debit": 900.0, "credit": 0.0},
+            {"account": "Input Tax CGST - _TIRC", "debit": 900.0, "credit": 0.0},
+            {"account": "Stock Received But Not Billed - _TIRC", "debit": 10000.0, "credit": 0.0},
+            {"account": "Creditors - _TIRC", "debit": 0.0, "credit": 10000.0},
+        ]
+        for expected_entry in expected_gl_entries:
+            self.assertIn(expected_entry, gl_entries, f"Expected GL Entry {expected_entry} not found in {gl_entries}")
 
     def test_rcm_transaction_with_returns(self):
         "Make sure RCM is not applied on Sales Return"
@@ -262,7 +281,9 @@ class TestTransaction(FrappeTestCase):
 
         self.assertRaisesRegex(
             frappe.exceptions.ValidationError,
-            re.compile(r"^(Please enter a valid HSN/SAC code for.*)$"),
+            re.compile(
+                r"^(HSN/SAC must exist and should be 6 or 8 digits long for.*)$"
+            ),
             doc.submit,
         )
 
@@ -277,7 +298,9 @@ class TestTransaction(FrappeTestCase):
         doc.save()
         self.assertRaisesRegex(
             frappe.exceptions.ValidationError,
-            re.compile(r"^(Please enter a valid HSN/SAC code for.*)$"),
+            re.compile(
+                r"^(HSN/SAC must exist and should be 6 or 8 digits long for.*)$"
+            ),
             doc.submit,
         )
 
@@ -418,6 +441,44 @@ class TestTransaction(FrappeTestCase):
         )
         doc.insert()
         self.assertDocumentEqual({"taxable_value": 100}, doc.items[0])
+
+    def test_credit_note_without_quantity(self):
+        if self.doctype != "Sales Invoice":
+            return
+        
+        doc = create_transaction(
+            **self.transaction_details, is_return=True, do_not_save=True
+        )
+        append_item(doc)
+
+        for item in doc.items:
+            item.qty = 0
+            item.rate = 0
+            item.price_list_rate = 0
+
+        # Adding charges
+        doc.append(
+            "taxes",
+            {
+                "charge_type": "Actual",
+                "account_head": "Freight and Forwarding Charges - _TIRC",
+                "description": "Freight",
+                "tax_amount": 20,
+                "cost_center": "Main - _TIRC",
+            },
+        )
+
+        # Adding taxes
+        _append_taxes(
+            doc, ("CGST", "SGST"), charge_type="On Previous Row Total", row_id=1
+        )
+        doc.insert()
+
+        # Ensure correct taxable_value and gst details
+        for item in doc.items:
+            self.assertDocumentEqual(
+                {"taxable_value": 10, "cgst_amount": 0.9, "sgst_amount": 0.9}, item
+            )
 
     def test_validate_place_of_supply(self):
         doc = create_transaction(**self.transaction_details, do_not_save=True)

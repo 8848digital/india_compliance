@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import List
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import IfNull
 from frappe.utils import add_to_date, cint, now_datetime
@@ -242,6 +243,9 @@ class PurchaseReconciliationTool(Document):
         if isup_linked_with := frappe.db.get_value(
             "GST Inward Supply", inward_supply_name, "link_name"
         ):
+            self.set_reconciliation_status(
+                link_doctype, (isup_linked_with,), "Unreconciled"
+            )
             self._unlink_documents((inward_supply_name,))
             purchases.append(isup_linked_with)
 
@@ -267,6 +271,9 @@ class PurchaseReconciliationTool(Document):
         inward_supplies.append(inward_supply_name)
 
         self.db_set("is_modified", 1)
+        self.set_reconciliation_status(
+            link_doctype, (purchase_invoice_name,), "Match Found"
+        )
 
         return self.ReconciledData.get(purchases, inward_supplies)
 
@@ -460,11 +467,23 @@ def download_gstr(
     if not periods:
         return
 
-    if return_type == ReturnType.GSTR2A:
-        return download_gstr_2a(company_gstin, periods, gst_categories)
+    try:
+        if return_type == ReturnType.GSTR2A:
+            return download_gstr_2a(company_gstin, periods, gst_categories)
 
-    if return_type == ReturnType.GSTR2B:
-        return download_gstr_2b(company_gstin, periods)
+        if return_type == ReturnType.GSTR2B:
+            return download_gstr_2b(company_gstin, periods)
+    
+    except Exception as e:
+        frappe.publish_realtime(
+            "gstr_2a_2b_download_message",
+            {
+                "title": _("2A/2B Download Failed"),
+                "message": str(e),
+                "indicator": "red",
+            },
+            user=frappe.session.user,
+        )
 
 
 def get_periods_to_download(company_gstin, return_type, periods):

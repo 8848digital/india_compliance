@@ -47,8 +47,7 @@ class GSTR:
         self.setup()
 
     def setup(self):
-        self.existing_transaction = {}
-        pass
+        self.existing_transaction = self.get_existing_transaction()
 
     def create_transactions(self, category, suppliers):
         if not suppliers:
@@ -63,28 +62,24 @@ class GSTR:
 
             current_transaction += 1
             frappe.publish_realtime(
-                "update_transactions_progress",
+                "update_2a_2b_transactions_progress",
                 {
                     "current_progress": current_transaction * 100 / total_transactions,
                     "return_period": self.return_period,
                 },
                 user=frappe.session.user,
-                doctype="Purchase Reconciliation Tool",
             )
 
             if transaction.get("unique_key") in self.existing_transaction:
                 self.existing_transaction.pop(transaction.get("unique_key"))
 
-        self.delete_missing_transactions()
+        self.existing_transaction = self.get_existing_transaction()
 
-    def delete_missing_transactions(self):
-        """
-        For GSTR2a, transactions are reflected immediately after it's pushed to GSTR-1.
-        At times, it may later be removed from GSTR-1.
-
-        In such cases, we need to delete such unfilled transactions not present in the latest data.
-        """
+    def handle_missing_transactions(self):
         return
+    
+    def get_existing_transaction(self):
+        return {}
 
     def get_all_transactions(self, category, suppliers):
         transactions = []
@@ -110,6 +105,7 @@ class GSTR:
             classification=category.value,
             **self.get_supplier_details(supplier),
             **self.get_invoice_details(invoice),
+            **self.get_download_details(),
             items=self.get_transaction_items(invoice),
         )
 
@@ -133,6 +129,10 @@ class GSTR:
 
     def get_invoice_details(self, invoice):
         return {}
+    
+    def get_download_details(self):
+        return {}
+    
 
     def get_transaction_items(self, invoice):
         return [

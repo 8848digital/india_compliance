@@ -172,7 +172,7 @@ class GSTR3B_ITC_Details(BaseGSTR3BDetails):
 
     def get_itc_from_boe(self):
         boe = frappe.qb.DocType("Bill of Entry")
-        boe_taxes = frappe.qb.DocType("Bill of Entry Taxes")
+        boe_taxes = frappe.qb.DocType("India Compliance Taxes and Charges")
 
         query = (
             frappe.qb.from_(boe)
@@ -208,6 +208,7 @@ class GSTR3B_ITC_Details(BaseGSTR3BDetails):
                 & (boe.company == self.company)
                 & (boe.company_gstin == self.company_gstin)
             )
+            .where(boe_taxes.parenttype == "Bill of Entry")
             .groupby(boe.name)
         )
 
@@ -422,7 +423,10 @@ class GSTR3B_Inward_Nil_Exempt(BaseGSTR3BDetails):
                     != IfNull(purchase_invoice.supplier_gstin, "")
                 )
             )
-            .groupby(purchase_invoice.name)
+            .groupby(
+                purchase_invoice.name,
+                purchase_invoice_item.gst_treatment
+            )
         )
 
         return query.run(as_dict=True)
@@ -450,7 +454,7 @@ class IneligibleITC:
         if ineligibility_reason == "Ineligible As Per Section 17(5)":
             query = query.where(dt_item.is_ineligible_for_itc == 1)
 
-        return query.groupby(dt[group_by]).run(as_dict=True)
+        return query.groupby(dt[group_by],dt.name).run(as_dict=True)
 
     def get_for_bill_of_entry(self, group_by="name"):
         doctype = "Bill of Entry"

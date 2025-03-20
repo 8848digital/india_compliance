@@ -204,20 +204,24 @@ def validate(doc, method=None):
 
 
 def before_save(doc, method=None):
+    if not is_e_waybill_applicable(doc):
+        doc.taxes_and_charges = ""
+        doc.taxes = []
+        return
+
+    for row in doc.taxes:
+        if row.charge_type == "Actual":
+            frappe.throw(
+                _(
+                    "Tax Row #{0}: Charge Type cannot be {1}. Try setting it to 'On Net Total' or 'On Item Quantity'."
+                ).format(row.idx, bold(row.charge_type))
+            )
+
+
+def validate_doc_references(doc, method=None):
     if ignore_gst_validations(doc):
         return
 
-    validate_doc_references(doc)
-
-
-def before_submit(doc, method=None):
-    if ignore_gst_validations(doc):
-        return
-
-    validate_doc_references(doc)
-
-
-def validate_doc_references(doc):
     is_return_material_transfer = (
         doc.doctype == "Stock Entry"
         and doc.purpose == "Material Transfer"
@@ -306,7 +310,7 @@ def validate_company_address_field(doc, company_address_field):
             doc,
             company_address_field,
             _(
-                "Please set {0} to ensure Bill From GSTIN is fetched in the transaction."
+                "Please set {0} to ensure Company GSTIN is fetched in the transaction."
             ).format(bold(doc.meta.get_label(company_address_field))),
         )
         is False

@@ -14,9 +14,9 @@ def map_date_format(date_str, source_format, target_format):
 
 class GSTR2a(GSTR):
     def setup(self):
+        super().setup()
         self.all_gstins = set()
         self.cancelled_gstins = {}
-        self.existing_transaction = self.get_existing_transaction()
 
     def get_existing_transaction(self):
         category = type(self).__name__[6:]
@@ -37,10 +37,19 @@ class GSTR2a(GSTR):
             for transaction in existing_transactions
         }
 
-    def delete_missing_transactions(self):
+    def handle_missing_transactions(self):
+        """
+        For GSTR2a, transactions are reflected immediately after it's pushed to GSTR-1.
+        At times, it may later be removed from GSTR-1.
+        
+        In such cases, we need to delete such unfilled transactions not present in the latest data.
+        """
+
         if self.existing_transaction:
             for inward_supply_name in self.existing_transaction.values():
-                frappe.delete_doc("GST Inward Supply", inward_supply_name)
+                frappe.delete_doc(
+                    "GST Inward Supply", inward_supply_name, ignore_permissions=True
+                )
 
     def get_supplier_details(self, supplier):
         supplier_details = {
@@ -59,6 +68,9 @@ class GSTR2a(GSTR):
         self.update_gstins_list(supplier_details)
 
         return supplier_details
+    
+    def get_download_details(self):
+        return {"is_downloaded_from_2a": 1}
 
     def update_gstins_list(self, supplier_details):
         self.all_gstins.add(supplier_details.get("supplier_gstin"))

@@ -3,7 +3,7 @@ from collections import defaultdict
 import frappe
 from frappe import _
 from frappe.utils import flt, get_link_to_form
-from erpnext.assets.doctype.asset.asset import (
+from assets.assets.doctype.asset.asset import (
     get_asset_account,
     is_cwip_accounting_enabled,
 )

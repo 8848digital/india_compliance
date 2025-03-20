@@ -8,7 +8,7 @@ app_email = "hello@indiacompliance.app"
 app_license = "GNU General Public License (v3)"
 required_apps = ["frappe/erpnext"]
 
-before_install = "india_compliance.patches.check_version_compatibility.execute"
+before_install = ["india_compliance.patches.check_version_compatibility.execute","india_compliance.install.before_install"]
 after_install = "india_compliance.install.after_install"
 before_uninstall = "india_compliance.uninstall.before_uninstall"
 
@@ -232,17 +232,22 @@ doc_events = {
     "Stock Entry": {
         "onload": "india_compliance.gst_india.overrides.subcontracting_transaction.onload",
         "validate": "india_compliance.gst_india.overrides.subcontracting_transaction.validate",
-        "before_submit": "india_compliance.gst_india.overrides.subcontracting_transaction.before_submit",
+        "before_save": "india_compliance.gst_india.overrides.subcontracting_transaction.before_save",
+        "before_submit": "india_compliance.gst_india.overrides.subcontracting_transaction.validate_doc_references",
         "after_mapping": "india_compliance.gst_india.overrides.subcontracting_transaction.after_mapping_stock_entry",
     },
     "Subcontracting Order": {
         "validate": "india_compliance.gst_india.overrides.subcontracting_transaction.validate",
+        "before_save": "india_compliance.gst_india.overrides.subcontracting_transaction.before_save",
         "after_mapping": "india_compliance.gst_india.overrides.subcontracting_transaction.after_mapping_subcontracting_order",
     },
     "Subcontracting Receipt": {
         "onload": "india_compliance.gst_india.overrides.subcontracting_transaction.onload",
         "validate": "india_compliance.gst_india.overrides.subcontracting_transaction.validate",
-        "before_save": "india_compliance.gst_india.overrides.subcontracting_transaction.before_save",
+        "before_save": [
+            "india_compliance.gst_india.overrides.subcontracting_transaction.before_save",
+            "india_compliance.gst_india.overrides.subcontracting_transaction.validate_doc_references",
+        ],
         "before_mapping": "india_compliance.gst_india.overrides.subcontracting_transaction.before_mapping_subcontracting_receipt",
     },
     "Supplier": {

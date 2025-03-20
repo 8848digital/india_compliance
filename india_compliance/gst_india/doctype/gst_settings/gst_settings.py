@@ -458,8 +458,8 @@ def update_pending_status(e_invoice_applicability_date, company=None):
 
     query = (
         frappe.qb.update(sales_invoice)
-        .join(sales_invoice_item)
-        .on(sales_invoice_item.parent == sales_invoice.name)
+        .from_(sales_invoice_item)
+        .where(sales_invoice_item.parent == sales_invoice.name)
         .set(sales_invoice.einvoice_status, "Pending")
         .where(
             IfNull(sales_invoice.billing_address_gstin, "")
