@@ -7,7 +7,7 @@ from pypika import Order
 import frappe
 from frappe import _, request_cache
 from frappe.query_builder.functions import Concat, Substring
-from frappe.utils import cint, getdate
+from frappe.utils import add_to_date, cint
 
 from india_compliance.exceptions import GSPServerError
 from india_compliance.gst_india.api_classes.base import BASE_URL
@@ -318,7 +318,7 @@ def get_gstr_1_return_status(company, gstin, period, year_increment=0):
             return info["status"]
 
     # late filing possibility (limitation: only checks for the next FY: good enough)
-    if not year_increment and get_current_fy() != fy:
+    if not year_increment and get_previous_period_fy() != fy:
         get_gstr_1_return_status(company, gstin, period, year_increment=1)
 
     return "Not Filed"
@@ -327,15 +327,15 @@ def get_gstr_1_return_status(company, gstin, period, year_increment=0):
 def update_gstr_returns_info(company, gstin, fy=None):
     if frappe.flags.in_test:
         return
-    
+
     if not fy:
-        fy = get_current_fy()
+        fy = get_previous_period_fy()
 
     response = PublicAPI().get_returns_info(gstin, fy)
     if not response:
         return
 
-    e_filed_list = response.get("EFiledlist")
+    e_filed_list = response.get("EFiledlist") or []
 
     from india_compliance.gst_india.doctype.gst_return_log.gst_return_log import (
         process_gstr_returns_info,
@@ -388,7 +388,7 @@ def get_and_update_filing_preference(gstin, period):
 
     response = fetch_filing_preference(gstin, get_fy(period))
 
-     # update GST Return Log
+    # update GST Return Log
     create_or_update_logs_for_year(gstin, period, response)
 
     return get_filing_preference(period, response)
@@ -419,7 +419,7 @@ def create_or_update_logs_for_year(gstin, period, response):
 
         if not filing_preference:
             continue
-        
+
         if log_name in existing_log:
             if existing_log[log_name] == filing_preference:
                 continue
@@ -476,8 +476,9 @@ def get_fy(period, year_increment=0):
         return f"{year}-{int(year[-2:]) + 1}"
 
 
-def get_current_fy():
-    period = getdate().strftime("%m%Y")
+def get_previous_period_fy():
+    # Best possible scenario is that the return was filed in the previous period.
+    period = add_to_date(None, months=-1).strftime("%m%Y")
     return get_fy(period)
 
 
