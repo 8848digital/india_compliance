@@ -2124,7 +2124,7 @@ class BooksDataMapper:
         )
 
     def process_data_for_hsn_summary(self, invoice, prepared_data):
-        key = f"{invoice.gst_hsn_code} - {invoice.stock_uom} - {flt(invoice.gst_rate)}"
+        key = f"{invoice.gst_hsn_code} - {invoice.uom} - {flt(invoice.gst_rate)}"
 
         if key not in prepared_data:
             mapped_dict = prepared_data.setdefault(
@@ -2134,7 +2134,7 @@ class BooksDataMapper:
                     GSTR1_DataField.DESCRIPTION.value: frappe.db.get_value(
                         "GST HSN Code", invoice.gst_hsn_code, "description"
                     ),
-                    GSTR1_DataField.UOM.value: invoice.stock_uom,
+                    GSTR1_DataField.UOM.value: invoice.uom,
                     GSTR1_DataField.QUANTITY.value: 0,
                     GSTR1_DataField.TAX_RATE.value: invoice.gst_rate,
                     GSTR1_DataField.TAXABLE_VALUE.value: 0,
@@ -2314,7 +2314,7 @@ class GSTR1BooksData(BooksDataMapper):
         for category, data in other_categories.items():
             if data:
                 prepared_data[category] = data
- 
+
         for data in prepared_data.values():
             if not isinstance(data, dict):
                 continue
@@ -2385,7 +2385,7 @@ class GSTR1BooksData(BooksDataMapper):
 
         return advances_data
 
-def process_for_quarterly(self, data):
+    def process_for_quarterly(self, data):
         if self.filters.filing_preference != "Quarterly":
             return
 
@@ -2404,83 +2404,83 @@ def process_for_quarterly(self, data):
         else:
             self.process_excluded_docs_for_quarterly(data, m1_m2_subcategories)
 
-def process_included_docs_for_quarterly(self, data, m1_m2_subcategories):
-    included_docs = self.get_already_filed_docs(m1_m2_subcategories)
+    def process_included_docs_for_quarterly(self, data, m1_m2_subcategories):
+        included_docs = self.get_already_filed_docs(m1_m2_subcategories)
 
-    for category in data:
-        if category not in m1_m2_subcategories:
-            continue
-
-        included = data.setdefault("already_included_docs_for_quarterly", [])
-
-        for key, row in data[category].copy().items():
-            if key in included_docs:
-                continue
-
-            row["sub_category"] = category
-            included.append(row)
-            del data[category][key]
-
-def process_excluded_docs_for_quarterly(self, data, m1_m2_subcategories):
-    for category in data.copy():
-        if category in m1_m2_subcategories:
-            continue
-
-        if category in (
-            GSTR1_SubCategory.HSN.value,
-            GSTR1_SubCategory.DOC_ISSUE.value,
-        ):
-            del data[category]
-            continue
-
-        excluded = data.setdefault("excluded_docs_for_quarterly", [])
-
-        for row in data[category].values():
-            if isinstance(row, dict):
-                row["sub_category"] = category
-                excluded.append(row)
-
-            elif isinstance(row, list):
-                for item in row:
-                    item["sub_category"] = category
-
-                excluded.extend(row)
-
-        del data[category]
-
-    return data
-
-def get_already_filed_docs(self, m1_m2_subcategories):
-    from india_compliance.gst_india.doctype.gst_return_log.gst_return_log import (
-        get_gst_return_log,
-    )
-
-    company_gstin = self.filters.company_gstin
-    year = self.filters.year
-
-    log_names = [
-        f"GSTR1-{(self.current_month-1):02d}{year}-{company_gstin}",
-        f"GSTR1-{(self.current_month-2):02d}{year}-{company_gstin}",
-    ]
-
-    filed_invoices = set()
-
-    for log_name in log_names:
-        gstr1_log = get_gst_return_log(
-            log_name,
-            company=self.filters.company,
-            filing_preference=self.filters.filing_preference,
-        )
-
-        if not gstr1_log.filed:
-            gstr1_log.generate_gstr1_data(self.filters)
-
-        filed_data = gstr1_log.get_json_for("filed")
-
-        for category, invoices in filed_data.items():
+        for category in data:
             if category not in m1_m2_subcategories:
                 continue
 
-            filed_invoices.update(invoices.keys())
+            included = data.setdefault("already_included_docs_for_quarterly", [])
 
-    return filed_invoices
+            for key, row in data[category].copy().items():
+                if key in included_docs:
+                    continue
+
+                row["sub_category"] = category
+                included.append(row)
+                del data[category][key]
+
+    def process_excluded_docs_for_quarterly(self, data, m1_m2_subcategories):
+        for category in data.copy():
+            if category in m1_m2_subcategories:
+                continue
+
+            if category in (
+                GSTR1_SubCategory.HSN.value,
+                GSTR1_SubCategory.DOC_ISSUE.value,
+            ):
+                del data[category]
+                continue
+
+            excluded = data.setdefault("excluded_docs_for_quarterly", [])
+
+            for row in data[category].values():
+                if isinstance(row, dict):
+                    row["sub_category"] = category
+                    excluded.append(row)
+
+                elif isinstance(row, list):
+                    for item in row:
+                        item["sub_category"] = category
+
+                    excluded.extend(row)
+
+            del data[category]
+
+        return data
+
+    def get_already_filed_docs(self, m1_m2_subcategories):
+        from india_compliance.gst_india.doctype.gst_return_log.gst_return_log import (
+            get_gst_return_log,
+        )
+
+        company_gstin = self.filters.company_gstin
+        year = self.filters.year
+
+        log_names = [
+            f"GSTR1-{(self.current_month-1):02d}{year}-{company_gstin}",
+            f"GSTR1-{(self.current_month-2):02d}{year}-{company_gstin}",
+        ]
+
+        filed_invoices = set()
+
+        for log_name in log_names:
+            gstr1_log = get_gst_return_log(
+                log_name,
+                company=self.filters.company,
+                filing_preference=self.filters.filing_preference,
+            )
+
+            if not gstr1_log.filed:
+                gstr1_log.generate_gstr1_data(self.filters)
+
+            filed_data = gstr1_log.get_json_for("filed")
+
+            for category, invoices in filed_data.items():
+                if category not in m1_m2_subcategories:
+                    continue
+
+                filed_invoices.update(invoices.keys())
+
+        return filed_invoices

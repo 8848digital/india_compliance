@@ -90,6 +90,11 @@ class GSTR1Beta(Document):
 
         settings = frappe.get_cached_doc("GST Settings")
 
+        # default
+        if not self.get("filing_preference"):
+            self.filing_preference = "Monthly"
+
+        # updated after last generation
         if self.filing_preference != gstr1_log.filing_preference:
             recompute_books = True
             gstr1_log.db_set("filing_preference", self.filing_preference)
@@ -108,7 +113,7 @@ class GSTR1Beta(Document):
             data = gstr1_log.load_data("books", "books_summary")
             data["status"] = gstr1_log.filing_status or "Not Filed"
             return data
-        
+
         if gstr1_log.has_all_files(settings):
             data = gstr1_log.get_gstr1_data()
 
@@ -134,7 +139,7 @@ class GSTR1Beta(Document):
         """
         Try to generate GSTR-1 data. Wrapper for generating GSTR-1 data
         """
-        
+
         filters = frappe._dict(
             company=self.company,
             company_gstin=self.company_gstin,
@@ -295,7 +300,7 @@ def get_journal_entries(month_or_quarter, year, company, filing_preference):
 
     if not data:
         return
-    
+
     return {"data": data, "posting_date": to_date}
 
 
