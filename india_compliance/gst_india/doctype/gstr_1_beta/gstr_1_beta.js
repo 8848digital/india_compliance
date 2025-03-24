@@ -223,7 +223,7 @@ frappe.ui.form.on(DOCTYPE, {
     },
 
     filing_preference: render_empty_state,
-    
+
     refresh(frm) {
         frm.disable_save();
         if (is_gstr1_api_enabled()) {
@@ -739,8 +739,10 @@ class GSTR1 {
 
         const has_records = this.data.books_summary?.some(row => row.no_of_records > 0);
         // Nil return cannot be filed for quarterly M1 and M2
-        const can_file_nil_return = this.frm.doc.filing_preference === "Monthly" ||
-        (this.frm.doc.filing_preference === "Quarterly" && this.frm.doc.month_or_quarter % 3 === 0);
+        const can_file_nil_return =
+            this.frm.doc.filing_preference === "Monthly" ||
+            (this.frm.doc.filing_preference === "Quarterly" &&
+                this.frm.doc.month_or_quarter % 3 === 0);
 
         if (!has_records && this.data.status != "Filed" && can_file_nil_return)
             this.frm.set_df_property("file_nil_gstr1", "hidden", 0);
@@ -2998,16 +3000,14 @@ function set_options_for_year(frm) {
 }
 
 function update_filing_preference(frm) {
+    const { month_or_quarter, year, company_gstin } = frm.doc;
+    if (!month_or_quarter || !year || !company_gstin) return;
+
     frappe.call({
         method: "india_compliance.gst_india.doctype.gstr_1_beta.gstr_1_beta.get_filing_preference_from_log",
-        args: {
-            month_or_quarter: frm.doc.month_or_quarter,
-            year: frm.doc.year,
-            company_gstin: frm.doc.company_gstin,
-        },
+        args: { month_or_quarter, year, company_gstin },
         callback: r => {
-            if (!r.message) return;
-            frm.set_value("filing_preference", r.message);
+            frm.set_value("filing_preference", r.message || "Monthly");
         },
     });
 }
