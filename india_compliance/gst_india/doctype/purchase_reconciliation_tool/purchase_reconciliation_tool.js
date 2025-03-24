@@ -641,6 +641,7 @@ class PurchaseReconciliationTool extends reconciliation.reconciliation_tabs {
                 options: "GST Inward Supply",
                 align: "center",
                 width: 120,
+                _after_format: (...args) => this.get_value_with_indicator(...args),
             },
             {
                 label: "Purchase <br>Invoice",
@@ -760,7 +761,7 @@ class PurchaseReconciliationToolAction {
             // to hide `Actions` button group on smaller screens
             $(group_div).addClass("hidden-md");
 
-            $(group_div).appendTo($(".custom-button-group"));
+            $(group_div).appendTo(this.frm.$wrapper.find(".custom-button-group"));
         }
     }
 
