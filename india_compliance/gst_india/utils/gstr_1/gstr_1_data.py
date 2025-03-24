@@ -458,6 +458,34 @@ class GSTR1Invoices(GSTR1Query, GSTR1Subcategory):
                 Sum(query.total_amount).as_("total_amount"),
             )
             .groupby(
+                query.qty,
+                query.billing_address_gstin,
+                query.company_gstin,
+                query.customer_name,
+                query.posting_date,
+                query.place_of_supply,
+                query.is_reverse_charge,
+                query.ecommerce_gstin,
+                query.is_return,
+                query.is_debit_note,
+                query.return_against,
+                query.is_export_with_gst,
+                query.shipping_port_code,
+                query.shipping_bill_number,
+                query.shipping_bill_date,
+                query.invoice_total,
+                query.returned_invoice_total,
+                query.gst_category,
+                query.taxable_value,
+                query.cgst_amount,
+                query.sgst_amount,
+                query.igst_amount,
+                query.cess_amount,
+                query.cess_non_advol_amount,
+                query.total_cess_amount,
+                query.total_tax,
+                query.total_amount,
+                query.item_code,
                 query.invoice_no,
                 query.gst_hsn_code,
                 query.gst_rate,
@@ -470,7 +498,6 @@ class GSTR1Invoices(GSTR1Query, GSTR1Subcategory):
         )
 
         return query.run(as_dict=True)
-
     def get_filtered_invoices(
         self, invoices, invoice_category=None, invoice_sub_category=None
     ):
