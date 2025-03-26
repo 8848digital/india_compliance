@@ -399,3 +399,4 @@ def get_gst_return_log(log_name, **kwargs):
     log.insert()
 
     return log
+

@@ -605,6 +605,7 @@ class GenerateGSTR1(SummarizeGSTR1, ReconcileGSTR1, AggregateInvoices):
             != 1
         ):
             return self.generate_only_books_data(data, filters, callback)
+
         # Get Data
         try:
             gov_data, is_enqueued = self.get_gov_gstr1_data()
@@ -919,6 +920,7 @@ class FileGSTR1:
         verify_request_in_progress(self, force)
 
         is_nil_return = sbool(is_nil_return)
+
         api = GSTR1API(self)
         response = api.proceed_to_file("GSTR1", self.return_period, is_nil_return)
 

@@ -176,17 +176,12 @@ def make_stock_entry(**args):
 
     return se
 
-
-<<<<<<< HEAD
-=======
 def create_subcontracting_data():
     make_raw_materials()
     make_service_items()
     make_subcontracted_items()
     make_boms()
 
-
->>>>>>> 748dfe80 (Merge pull request #52 from 8848digital/gst_sales_register_beta_report_issue_resolving)
 SERVICE_ITEM = {
     "item_code": "Subcontracted Service Item 1",
     "qty": 10,
@@ -200,14 +195,7 @@ class TestSubcontractingTransaction(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-<<<<<<< HEAD
-        make_raw_materials()
-        make_service_items()
-        make_subcontracted_items()
-        make_boms()
-=======
         create_subcontracting_data()
->>>>>>> 748dfe80 (Merge pull request #52 from 8848digital/gst_sales_register_beta_report_issue_resolving)
 
         frappe.db.set_single_value(
             "GST Settings",

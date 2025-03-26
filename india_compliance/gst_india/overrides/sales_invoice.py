@@ -148,10 +148,6 @@ def is_shipping_address_in_india(doc):
 
 
 def on_submit(doc, method=None):
-<<<<<<< HEAD
-    validate_backdated_transaction(doc)
-
-=======
     # Check to validate_backdated_transaction
     if ignore_gst_validations(doc):
         return
@@ -159,7 +155,6 @@ def on_submit(doc, method=None):
     validate_backdated_transaction(doc)
 
     # Checks to validate generation of e-Invoice
->>>>>>> 748dfe80 (Merge pull request #52 from 8848digital/gst_sales_register_beta_report_issue_resolving)
     if getattr(doc, "_submitted_from_ui", None) or validate_transaction(doc) is False:
         return
 
@@ -367,13 +362,9 @@ def set_and_validate_advances_with_gst(doc):
         allocated_amount_with_taxes += advance.allocated_amount
 
     excess_allocation = flt(
-<<<<<<< HEAD
-        flt(allocated_amount_with_taxes, 2) - (doc.rounded_total or doc.grand_total), 2
-=======
         flt(allocated_amount_with_taxes, 2)
         - (doc.base_rounded_total or doc.base_grand_total),
         2,
->>>>>>> 748dfe80 (Merge pull request #52 from 8848digital/gst_sales_register_beta_report_issue_resolving)
     )
     if excess_allocation > 0:
         message = _(
@@ -389,8 +380,5 @@ def set_and_validate_advances_with_gst(doc):
     doc.total_advance = allocated_amount_with_taxes
     doc.set_payment_schedule()
     doc.outstanding_amount -= tax_amount
-<<<<<<< HEAD
+    
     frappe.flags.gst_excess_allocation_validated = True
-=======
-    frappe.flags.gst_excess_allocation_validated = True
->>>>>>> 748dfe80 (Merge pull request #52 from 8848digital/gst_sales_register_beta_report_issue_resolving)

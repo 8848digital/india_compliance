@@ -2314,6 +2314,7 @@ class GSTR1BooksData(BooksDataMapper):
         for category, data in other_categories.items():
             if data:
                 prepared_data[category] = data
+
         for data in prepared_data.values():
             if not isinstance(data, dict):
                 continue

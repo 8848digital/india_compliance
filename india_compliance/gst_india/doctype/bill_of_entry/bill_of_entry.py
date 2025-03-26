@@ -152,6 +152,7 @@ class BillofEntry(Document):
                     _("Company for Purchase Invoice {0} must be {1}").format(
                         invoice.name, self.company
                     )
+
                 )
 
             if invoice.company_gstin != self.company_gstin:
@@ -388,24 +389,24 @@ class BillofEntry(Document):
 
         return asset_items
 
-@frappe.whitelist()
-def get_items_from_purchase_invoice(self, purchase_invoices):
-    frappe.has_permission("Bill Of Entry", "write")
-    frappe.has_permission("Purchase Invoice", "read")
+    @frappe.whitelist()
+    def get_items_from_purchase_invoice(self, purchase_invoices):
+        frappe.has_permission("Bill Of Entry", "write")
+        frappe.has_permission("Purchase Invoice", "read")
 
-    existing_items = [
-        item.pi_detail for item in self.get("items") if item.pi_detail
-    ]
-    item_to_add = get_pi_items(purchase_invoices)
+        existing_items = [
+            item.pi_detail for item in self.get("items") if item.pi_detail
+        ]
+        item_to_add = get_pi_items(purchase_invoices)
 
-    if not existing_items:
-        self.items = []
+        if not existing_items:
+            self.items = []
 
-    for item in item_to_add:
-        if item.pi_detail not in existing_items:
-            self.append("items", {**item})
+        for item in item_to_add:
+            if item.pi_detail not in existing_items:
+                self.append("items", {**item})
 
-    set_missing_values(self)
+        set_missing_values(self)
 
 
 def set_missing_values(source, target=None):
@@ -731,4 +732,5 @@ def get_pi_items(purchase_invoices):
         )
         .where(pi_item.parent.isin(purchase_invoices))
         .run(as_dict=True)
+
     )
