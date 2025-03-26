@@ -8,7 +8,13 @@ from india_compliance.gst_india.overrides.sales_invoice import (
 from india_compliance.gst_india.overrides.transaction import (
     validate_hsn_codes as _validate_hsn_codes,
 )
+<<<<<<< HEAD
 from india_compliance.gst_india.overrides.transaction import validate_transaction
+=======
+from india_compliance.gst_india.overrides.transaction import (
+    validate_transaction,
+)
+>>>>>>> 748dfe80 (Merge pull request #52 from 8848digital/gst_sales_register_beta_report_issue_resolving)
 from india_compliance.gst_india.utils import is_api_enabled, validate_invoice_number
 from india_compliance.gst_india.utils.e_waybill import get_e_waybill_info
 
@@ -21,7 +27,11 @@ def onload(doc, method=None):
         doc.set_onload(
             "bill_of_entry_exists",
             frappe.db.exists(
+<<<<<<< HEAD
                 "Bill of Entry",
+=======
+                "Bill of Entry Item",
+>>>>>>> 748dfe80 (Merge pull request #52 from 8848digital/gst_sales_register_beta_report_issue_resolving)
                 {"purchase_invoice": doc.name, "docstatus": 1},
             ),
         )
