@@ -39,7 +39,6 @@ class GSTR2a(GSTR):
         """
         For GSTR2a, transactions are reflected immediately after it's pushed to GSTR-1.
         At times, it may later be removed from GSTR-1.
-
         In such cases, we need to delete such unfilled transactions not present in the latest data.
         """
 
@@ -63,7 +62,6 @@ class GSTR2a(GSTR):
         self.update_gstins_list(supplier_details)
 
         return supplier_details
-
     def get_download_details(self):
         return {"is_downloaded_from_2a": 1}
 

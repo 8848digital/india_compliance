@@ -3123,4 +3123,4 @@ function refresh_filing_preference(frm) {
         frappe.show_alert(__("Filing preference updated. Regenerate data."));
         frm.set_value("filing_preference", new_preference);
     });
-}
+

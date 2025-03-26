@@ -20,7 +20,6 @@ class GSTR2b(GSTR):
             )
             for transaction in existing_transactions
         }
-
     def handle_missing_transactions(self):
         """
         For GSTR2b, only filed transactions are reported. They may be removed from GSTR-2b later

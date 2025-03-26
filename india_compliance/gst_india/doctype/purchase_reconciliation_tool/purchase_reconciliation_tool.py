@@ -391,7 +391,6 @@ def download_gstr(
 
         if return_type == ReturnType.GSTR2B:
             return download_gstr_2b(company_gstin, periods)
-
     except Exception as e:
         frappe.publish_realtime(
             "gstr_2a_2b_download_message",

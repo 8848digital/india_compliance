@@ -52,4 +52,6 @@ class PublicAPI(BaseAPI):
 
         if error_code in self.IGNORED_ERROR_CODES:
             response_json.error_code = error_code
+
             return True
+

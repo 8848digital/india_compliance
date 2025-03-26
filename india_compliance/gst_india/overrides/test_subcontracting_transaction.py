@@ -176,13 +176,11 @@ def make_stock_entry(**args):
 
     return se
 
-
 def create_subcontracting_data():
     make_raw_materials()
     make_service_items()
     make_subcontracted_items()
     make_boms()
-
 
 SERVICE_ITEM = {
     "item_code": "Subcontracted Service Item 1",

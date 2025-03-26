@@ -152,6 +152,7 @@ class BillofEntry(Document):
                     _("Company for Purchase Invoice {0} must be {1}").format(
                         invoice.name, self.company
                     )
+
                 )
 
             if invoice.company_gstin != self.company_gstin:
@@ -731,4 +732,5 @@ def get_pi_items(purchase_invoices):
         )
         .where(pi_item.parent.isin(purchase_invoices))
         .run(as_dict=True)
+
     )

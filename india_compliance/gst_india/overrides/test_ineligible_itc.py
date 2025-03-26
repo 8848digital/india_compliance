@@ -853,6 +853,7 @@ class TestIneligibleITC(FrappeTestCase):
         for item in lcv.items:
             if item.item_code == "Test Ineligible Stock Item":
                 self.assertEqual(item.applicable_charges, 10.26)  # 10.26 for 3 Nos
+
             elif item.item_code == "Test Ineligible Fixed Asset":
                 self.assertEqual(item.applicable_charges, 179.82)
             else:
@@ -1007,4 +1008,6 @@ def create_test_items():
             "item_code": "Test Ineligible Service Item",
             "is_ineligible_for_itc": 1,
         }
+
     ).insert(ignore_if_duplicate=True)
+
