@@ -8,13 +8,10 @@ from erpnext.accounts.utils import create_payment_ledger_entry
 from erpnext.controllers.accounts_controller import get_advance_payment_entries
 
 from india_compliance.gst_india.constants import TAX_TYPES
-<<<<<<< HEAD
-from india_compliance.gst_india.overrides.transaction import get_gst_details
-=======
+
 from india_compliance.gst_india.overrides.transaction import (
     get_gst_details,
 )
->>>>>>> 748dfe80 (Merge pull request #52 from 8848digital/gst_sales_register_beta_report_issue_resolving)
 from india_compliance.gst_india.overrides.transaction import (
     validate_backdated_transaction as _validate_backdated_transaction,
 )
