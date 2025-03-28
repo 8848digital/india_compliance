@@ -1028,12 +1028,13 @@ class TestSpecificTransactions(FrappeTestCase):
         test_user.add_roles("Accounts User")
         frappe.set_user(test_user.name)
 
-        # submit invoice
-        self.assertRaisesRegex(
-            frappe.exceptions.ValidationError,
-            re.compile(r"You are not allowed to submit Sales Invoice"),
-            si.submit,
-        )
+        with self.set_user(test_user.name):
+            # submit invoice
+            self.assertRaisesRegex(
+                frappe.exceptions.ValidationError,
+                re.compile(r"You are not allowed to submit Sales Invoice"),
+                si.submit,
+            )
 
     def test_backdated_transaction_with_comment(self):
         si = create_transaction(doctype="Sales Invoice", do_not_submit=True)
