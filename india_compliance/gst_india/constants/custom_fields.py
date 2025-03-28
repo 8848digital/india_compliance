@@ -1069,6 +1069,14 @@ CUSTOM_FIELDS = {
             "read_only": 1,
             "print_hide": 1,
         },
+     ],
+    "Purchase Invoice Item": [
+        {
+            "fieldname": "pending_boe_qty",
+            "label": "Pending BOE Qty",
+            "fieldtype": "Float",
+            "insert_after": "rejected_qty",
+        },
     ],
     "Purchase Receipt": [
         {
