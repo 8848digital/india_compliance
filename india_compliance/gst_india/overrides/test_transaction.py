@@ -755,7 +755,7 @@ class TestTransaction(FrappeTestCase):
             **self.transaction_details,
             "customer": "_Test Foreign Customer",
             "party_name": "_Test Foreign Customer",
-            "shipping_address_name": "_Test Registered Customer-Billing",
+            "shipping_address_name": "_Test Foreign Customer-Billing-1",
         }
 
         doc = create_transaction(**doc_details, is_in_state=True)
