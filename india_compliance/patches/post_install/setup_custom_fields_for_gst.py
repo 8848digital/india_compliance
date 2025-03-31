@@ -1,7 +1,6 @@
 import frappe
 
-from india_compliance.gst_india.utils.custom_fields import delete_old_fields
-
+from india_compliance.utils.custom_fields import delete_old_fields
 
 def execute():
     delete_tax_id_custom_field()
