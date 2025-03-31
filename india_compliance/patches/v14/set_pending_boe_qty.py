@@ -8,13 +8,13 @@ def execute():
 
     (
         frappe.qb.update(pi_item)
-        .left_join(boe_item)
-        .on(boe_item.pi_detail == pi_item.name)
         .set(
             pi_item.pending_boe_qty,
             Case()
             .when(((boe_item.name.isnotnull()) & (boe_item.docstatus == 1)), 0)
             .else_(pi_item.qty),
         )
+        .from_(boe_item)
+        .where(boe_item.pi_detail == pi_item.name)
         .run()
     )
