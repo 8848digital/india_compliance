@@ -1,4 +1,5 @@
 import copy
+import functools
 import io
 import tarfile
 
@@ -116,6 +117,7 @@ def get_gstin_list(party, party_type="Company"):
 
 
 @frappe.whitelist()
+@frappe.request_cache
 def get_party_for_gstin(gstin, party_type="Supplier"):
     if not gstin:
         return
@@ -589,6 +591,9 @@ def get_gst_account_gst_tax_type_map():
             if row.account_type and row.account_type.endswith("Reverse Charge"):
                 account_key = account_key + "_rcm"
 
+            if row.account_type and row.account_type.endswith("Refund"):
+                account_key = account_key + "_refund"
+
             gst_account_map[account_value] = account_key
 
     return gst_account_map
@@ -1012,6 +1017,9 @@ def get_month_or_quarter_dict():
     }
 
 
+MONTHS = list(get_month_or_quarter_dict().keys())[4:]
+
+
 def get_period(month_or_quarter, year=None):
     month_or_quarter_no = get_month_or_quarter_dict().get(month_or_quarter)
 
@@ -1031,3 +1039,44 @@ def is_outward_stock_entry(doc):
         and not doc.is_return
     ):
         return True
+
+
+def create_notification(
+    message_content, document_type, document_name=None, request_id=None
+):
+    # request_id shows failure response
+    if request_id and (
+        doc_name := frappe.db.get_value(
+            "Integration Request", {"request_id": request_id}
+        )
+    ):
+        document_type = "Integration Request"
+        document_name = doc_name
+
+    notification = frappe.get_doc(
+        {
+            "doctype": "Notification Log",
+            "for_user": frappe.session.user,
+            "type": "Alert",
+            "document_type": document_type,
+            "document_name": document_name or document_type,
+            "subject": message_content.get("subject"),
+            "email_content": message_content.get("body"),
+        }
+    )
+    notification.insert()
+
+
+def enable_autocommit(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        db = frappe.local.db
+        autocommit = db.auto_commit_on_many_writes
+        db.auto_commit_on_many_writes = 1
+
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            db.auto_commit_on_many_writes = autocommit
+
+    return wrapper
