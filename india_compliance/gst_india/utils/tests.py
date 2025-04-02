@@ -21,7 +21,7 @@ def create_purchase_invoice(**data):
 def create_transaction(**data):
     data = frappe._dict(data)
     transaction = frappe.get_doc(data)
-
+    transaction.currency = "INR"
     if not transaction.company:
         transaction.company = "_Test Indian Registered Company"
 
@@ -79,7 +79,7 @@ def create_transaction(**data):
         _append_taxes(transaction, "IGST RCM", company_abbr, rate=18)
 
     if not data.do_not_save:
-        transaction.insert()
+        transaction.insert(ignore_permissions=True)
 
         if not data.do_not_submit:
             transaction.submit()
