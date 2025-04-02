@@ -8,7 +8,11 @@ from india_compliance.gst_india.overrides.sales_invoice import (
 from india_compliance.gst_india.overrides.transaction import (
     validate_hsn_codes as _validate_hsn_codes,
 )
-from india_compliance.gst_india.overrides.transaction import validate_transaction
+
+from india_compliance.gst_india.overrides.transaction import (
+    validate_transaction,
+)
+
 from india_compliance.gst_india.utils import is_api_enabled, validate_invoice_number
 from india_compliance.gst_india.utils.e_waybill import get_e_waybill_info
 
@@ -20,10 +24,7 @@ def onload(doc, method=None):
     if doc.gst_category == "Overseas":
         doc.set_onload(
             "bill_of_entry_exists",
-            frappe.db.exists(
-                "Bill of Entry",
-                {"purchase_invoice": doc.name, "docstatus": 1},
-            ),
+            not any(item.pending_boe_qty > 0 for item in doc.items),
         )
 
     if not doc.get("ewaybill"):
@@ -55,7 +56,7 @@ def validate(doc, method=None):
     validate_supplier_invoice_number(doc)
     validate_with_inward_supply(doc)
     set_reconciliation_status(doc)
-
+    set_pending_boe_qty(doc)
 
 def on_cancel(doc, method=None):
     frappe.db.set_value(
@@ -78,6 +79,9 @@ def set_reconciliation_status(doc):
 
     doc.reconciliation_status = reconciliation_status
 
+def set_pending_boe_qty(doc):
+    for item in doc.items:
+        item.pending_boe_qty = item.qty
 
 def is_b2b_invoice(doc):
     return not (
