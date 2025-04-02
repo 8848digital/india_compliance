@@ -400,7 +400,7 @@ class PurchaseInvoice:
             .where(self.PI.gst_category.isin(gst_category))
             .where(self.PI.is_return == is_return)
         )
-
+        
         data = query.run(as_dict=True)
 
         for doc in data:
@@ -465,7 +465,7 @@ class PurchaseInvoice:
                 # Default to posting date if bill date is not available.
                 Case()
                 .when(
-                    IfNull(self.PI.bill_date, "") == "",
+                    IfNull(self.PI.bill_date, None) == None,
                     self.PI.posting_date,
                 )
                 .else_(self.PI.bill_date)
