@@ -6,7 +6,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import flt, getdate
+from frappe.utils import getdate
 
 from india_compliance.gst_india.utils.gstr_1.gstr_1_data import GSTR1Invoices
 
