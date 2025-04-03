@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 import frappe
 from frappe import _
 from frappe.model.meta import get_field_precision
@@ -190,7 +188,6 @@ def validate_with_inward_supply(doc):
         return
 
     mismatch_fields = {}
-    tax_fields = defaultdict(int)
     
     taxable_value_precision = get_field_precision(
         frappe.get_meta("GST Inward Supply").get_field("taxable_value")
@@ -219,21 +216,15 @@ def validate_with_inward_supply(doc):
         mismatch_fields["Taxable Value"] = doc._inward_supply.get("taxable_value")
 
     # mismatch for taxes
-    for row in doc.items:
-        for tax in GST_TAX_TYPES[:-1]:
-            tax_fields[tax] += row.get(f"{tax}_amount")
+    for tax in GST_TAX_TYPES[:-1]:
+        tax_amount = get_tax_amount(doc.taxes, tax)
+        if tax == "cess":
+            tax_amount += get_tax_amount(doc.taxes, "cess_non_advol")
 
+        if flt(tax_amount, tax_precision) == doc._inward_supply.get(tax):
+            continue
 
-        tax_fields["cess"] += row.get("cess_non_advol_amount")
-
-
-    mismatch_fields.update(
-        {
-            tax.upper(): doc._inward_supply.get(tax)
-            for tax, amount in tax_fields.items()
-            if flt(amount, tax_precision) != doc._inward_supply.get(tax)
-        }
-    )
+        mismatch_fields[tax.upper()] = doc._inward_supply.get(tax)
 
 
     if mismatch_fields:
@@ -255,6 +246,16 @@ def validate_with_inward_supply(doc):
             alert=True,
             indicator="green",
         )
+
+def get_tax_amount(taxes, gst_tax_type):
+    if not (taxes or gst_tax_type):
+        return 0
+
+    return sum(
+        tax.base_tax_amount_after_discount_amount
+        for tax in taxes
+        if tax.gst_tax_type == gst_tax_type
+    )
 
 def set_ineligibility_reason(doc, show_alert=True):
     doc.ineligibility_reason = ""
