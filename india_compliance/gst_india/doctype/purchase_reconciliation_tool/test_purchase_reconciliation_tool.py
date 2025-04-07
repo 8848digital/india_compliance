@@ -63,7 +63,9 @@ class TestPurchaseReconciliationTool(FrappeTestCase):
                 "year_end_date": "2024-03-31",
                 "year": "2023-2024",
             }
-        ).insert(ignore_if_duplicate=True)
+        )
+        fiscal_year.flags.ignore_validate = True
+        fiscal_year.insert(ignore_if_duplicate=True)
 
         cls.test_data = frappe.get_file_json(
             frappe.get_app_path(
