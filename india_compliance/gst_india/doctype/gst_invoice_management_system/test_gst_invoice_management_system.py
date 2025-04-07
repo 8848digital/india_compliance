@@ -2,7 +2,7 @@
 # See license.txt
 
 import frappe
-from frappe.tests import FrappeTestCase, change_settings
+from frappe.tests.utils import FrappeTestCase, change_settings
 from frappe.utils import add_to_date
 
 from india_compliance.gst_india.doctype.gst_invoice_management_system.gst_invoice_management_system import (
