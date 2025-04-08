@@ -2,7 +2,7 @@ from datetime import date
 
 import frappe
 from frappe import parse_json, read_file
-from frappe.tests import FrappeTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from india_compliance.gst_india.utils import get_data_file_path
 from india_compliance.gst_india.utils.gstr_2 import save_ims_invoices
