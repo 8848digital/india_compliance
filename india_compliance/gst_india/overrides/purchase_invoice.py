@@ -1,10 +1,13 @@
 import frappe
 from frappe import _
+from frappe.model.meta import get_field_precision
 from frappe.utils import flt
 
+from india_compliance.gst_india.constants import GST_TAX_TYPES
 from india_compliance.gst_india.overrides.sales_invoice import (
     update_dashboard_with_gst_logs,
 )
+
 from india_compliance.gst_india.overrides.transaction import (
     validate_hsn_codes as _validate_hsn_codes,
 )
@@ -52,7 +55,8 @@ def validate(doc, method=None):
 
     validate_hsn_codes(doc)
     set_ineligibility_reason(doc)
-    update_itc_totals(doc)
+    set_itc_classification(doc)
+    validate_reverse_charge(doc)
     validate_supplier_invoice_number(doc)
     validate_with_inward_supply(doc)
     set_reconciliation_status(doc)
@@ -91,34 +95,6 @@ def is_b2b_invoice(doc):
         or doc.is_opening == "Yes"
         or any(row for row in doc.items if row.gst_treatment == "Non-GST")
     )
-
-
-def update_itc_totals(doc, method=None):
-    # Set default value
-    set_itc_classification(doc)
-    validate_reverse_charge(doc)
-
-    # Initialize values
-    doc.itc_integrated_tax = 0
-    doc.itc_state_tax = 0
-    doc.itc_central_tax = 0
-    doc.itc_cess_amount = 0
-
-    if doc.ineligibility_reason == "ITC restricted due to PoS rules":
-        return
-
-    for tax in doc.get("taxes"):
-        if tax.gst_tax_type == "igst":
-            doc.itc_integrated_tax += flt(tax.base_tax_amount_after_discount_amount)
-
-        if tax.gst_tax_type == "sgst":
-            doc.itc_state_tax += flt(tax.base_tax_amount_after_discount_amount)
-
-        if tax.gst_tax_type == "cgst":
-            doc.itc_central_tax += flt(tax.base_tax_amount_after_discount_amount)
-
-        if tax.gst_tax_type == "cess":
-            doc.itc_cess_amount += flt(tax.base_tax_amount_after_discount_amount)
 
 
 def set_itc_classification(doc):
@@ -185,7 +161,15 @@ def validate_with_inward_supply(doc):
         return
 
     mismatch_fields = {}
-    for field in [
+    
+    taxable_value_precision = get_field_precision(
+        frappe.get_meta("GST Inward Supply").get_field("taxable_value")
+    )
+    tax_precision = get_field_precision(
+        frappe.get_meta("GST Inward Supply").get_field("igst")
+    )
+
+    for field in (
         "company",
         "company_gstin",
         "supplier_gstin",
@@ -193,25 +177,28 @@ def validate_with_inward_supply(doc):
         "bill_date",
         "is_reverse_charge",
         "place_of_supply",
-    ]:
+    ):
         if doc.get(field) != doc._inward_supply.get(field):
             mismatch_fields[field] = doc._inward_supply.get(field)
 
     # mismatch for taxable_value
-    taxable_value = sum([item.taxable_value for item in doc.items])
+    taxable_value = flt(
+        sum(item.taxable_value for item in doc.items), taxable_value_precision
+    )
     if taxable_value != doc._inward_supply.get("taxable_value"):
         mismatch_fields["Taxable Value"] = doc._inward_supply.get("taxable_value")
 
     # mismatch for taxes
-    for tax in ["cgst", "sgst", "igst", "cess"]:
+    for tax in GST_TAX_TYPES[:-1]:
         tax_amount = get_tax_amount(doc.taxes, tax)
         if tax == "cess":
             tax_amount += get_tax_amount(doc.taxes, "cess_non_advol")
 
-        if tax_amount == doc._inward_supply.get(tax):
+        if flt(tax_amount, tax_precision) == doc._inward_supply.get(tax):
             continue
 
         mismatch_fields[tax.upper()] = doc._inward_supply.get(tax)
+
 
     if mismatch_fields:
         message = (
@@ -233,19 +220,15 @@ def validate_with_inward_supply(doc):
             indicator="green",
         )
 
-
 def get_tax_amount(taxes, gst_tax_type):
     if not (taxes or gst_tax_type):
         return 0
 
     return sum(
-        [
-            tax.base_tax_amount_after_discount_amount
-            for tax in taxes
-            if tax.gst_tax_type == gst_tax_type
-        ]
+        tax.base_tax_amount_after_discount_amount
+        for tax in taxes
+        if tax.gst_tax_type == gst_tax_type
     )
-
 
 def set_ineligibility_reason(doc, show_alert=True):
     doc.ineligibility_reason = ""
