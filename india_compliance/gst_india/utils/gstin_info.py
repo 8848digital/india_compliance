@@ -43,6 +43,7 @@ CHARACTERS_TO_STRIP = f"{whitespace},"
 def get_gstin_info(gstin, *, doc=None, throw_error=True):
     if doc and isinstance(doc, str):
         doc = frappe.parse_json(doc)
+
     if not frappe.get_cached_doc("User", frappe.session.user).has_desk_access():
         frappe.throw(_("Not allowed"), frappe.PermissionError)
 
@@ -186,7 +187,7 @@ def _extract_address_lines(address):
     return address_line1, address_line2
 
 
-def fetch_gstin_status(*, gstin=None, throw=True):
+def fetch_gstin_status(*, gstin=None, doc=None, throw=True):
     """
     Fetch GSTIN status from E-Invoice API or Public API
 
@@ -208,9 +209,9 @@ def fetch_gstin_status(*, gstin=None, throw=True):
             response = PublicAPI(doc).get_gstin_info(gstin)
             return get_formatted_response_for_status(response)
 
-        response = EInvoiceAPI(doc=doc, company_gstin=company_gstin).get_gstin_info(
-            gstin
-        )
+        doc = doc or frappe._dict()
+        doc.company_gstin = company_gstin
+        response = EInvoiceAPI(doc=doc).get_gstin_info(gstin)
         return frappe._dict(
             {
                 "gstin": gstin,
@@ -253,7 +254,7 @@ def get_formatted_response_for_status(response):
     )
 
 
-def fetch_transporter_id_status(transporter_id, throw=True, doc=None):
+def fetch_transporter_id_status(transporter_id, doc=None, throw=True):
     """
     Fetch Transporter ID status from E-Waybill API
 
@@ -264,15 +265,15 @@ def fetch_transporter_id_status(transporter_id, throw=True, doc=None):
         return
 
     gst_settings = frappe.get_cached_doc("GST Settings", None)
-    company_gstin = gst_settings.get_gstin_with_credentials(service="e-Waybill")
+    doc = doc or frappe._dict()
+    doc.company_gstin = gst_settings.get_gstin_with_credentials(service="e-Waybill")
 
-    if not company_gstin:
+    if not doc.company_gstin:
         return
 
     try:
-        response = EWaybillAPI(
-            doc=doc, company_gstin=company_gstin
-        ).get_transporter_details(transporter_id)
+        # fetched using first credentials
+        response = EWaybillAPI(doc=doc).get_transporter_details(transporter_id)
 
     except Exception as e:
         if throw:
