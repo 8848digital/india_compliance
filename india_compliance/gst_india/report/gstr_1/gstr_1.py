@@ -16,9 +16,6 @@ from india_compliance.gst_india.report.hsn_wise_summary_of_outward_supplies.hsn_
     get_columns as get_hsn_columns,
 )
 from india_compliance.gst_india.report.hsn_wise_summary_of_outward_supplies.hsn_wise_summary_of_outward_supplies import (
-    get_conditions as get_hsn_conditions,
-)
-from india_compliance.gst_india.report.hsn_wise_summary_of_outward_supplies.hsn_wise_summary_of_outward_supplies import (
     get_hsn_data,
     get_hsn_wise_json_data,
 )
@@ -63,32 +60,6 @@ class Gstr1Report:
         self.company_currency = frappe.get_cached_value(
             "Company", filters.get("company"), "default_currency"
         )
-        self.select_columns = """
-            name as invoice_number,
-            customer_name,
-            posting_date,
-            base_grand_total,
-            base_rounded_total,
-            NULLIF(billing_address_gstin, '') as billing_address_gstin,
-            place_of_supply,
-            ecommerce_gstin,
-            is_reverse_charge,
-            return_against,
-            is_return,
-            is_debit_note,
-            gst_category,
-            is_export_with_gst as export_type,
-            port_code,
-            shipping_bill_number,
-            shipping_bill_date,
-            company_gstin,
-            (
-                CASE
-                    WHEN gst_category = "Unregistered" AND NULLIF(return_against, '') is not null
-                    THEN (select base_grand_total from `tabSales Invoice` ra where ra.name = si.return_against)
-                END
-            ) AS return_against_invoice_total
-        """
 
     def run(self):
         self.get_columns()
@@ -311,22 +282,50 @@ class Gstr1Report:
         self.invoices = frappe._dict()
         conditions = self.get_conditions()
 
-        invoice_data = frappe.db.sql(
-            """
-            select
-                {select_columns}
-            from `tab{doctype}` si
-            where docstatus = 1 {where_conditions}
-            and is_opening = 'No'
-            order by posting_date desc
-            """.format(
-                select_columns=self.select_columns,
-                doctype=self.doctype,
-                where_conditions=conditions,
-            ),
-            self.filters,
-            as_dict=1,
+        si = frappe.qb.DocType(self.doctype)
+        query = (
+            frappe.qb.from_(si)
+            .select(
+                si.name.as_("invoice_number"),
+                si.customer_name,
+                si.posting_date,
+                si.base_grand_total,
+                si.base_rounded_total,
+                IfNull(si.billing_address_gstin, "").as_("billing_address_gstin"),
+                si.place_of_supply,
+                si.ecommerce_gstin,
+                si.is_reverse_charge,
+                si.return_against,
+                si.is_return,
+                si.is_debit_note,
+                si.gst_category,
+                si.is_export_with_gst.as_("export_type"),
+                si.port_code,
+                si.shipping_bill_number,
+                si.shipping_bill_date,
+                si.company_gstin,
+                Case()
+                .when(
+                    (si.gst_category == "Unregistered") 
+                    & (IfNull(si.return_against, "") != ""),
+                    (frappe.qb.from_(self.doctype)
+                    .select("base_grand_total")
+                    .where(frappe.qb.Field("name") == si.return_against))
+                )
+                .else_(None)
+                .as_("return_against_invoice_total")
+            )
+            .where(si.docstatus == 1)
+            .where(si.is_opening == "No")
         )
+
+        # Apply all conditions
+        for condition in conditions:
+            query = query.where(condition)
+
+        query = query.orderby(si.posting_date, order=frappe.qb.desc)
+
+        invoice_data = query.run(as_dict=True)
 
         for d in invoice_data:
             d.is_reverse_charge = "Y" if d.is_reverse_charge else "N"
@@ -356,105 +355,122 @@ class Gstr1Report:
 
     def get_conditions(self):
         if self.filters.get("type_of_business") == "HSN":
-            return get_hsn_conditions(self.filters)
+            return self.get_hsn_conditions(self.filters)
+        
+        conditions = []
 
-        conditions = ""
+        
+        # Basic conditions
+        if self.filters.get("company"):
+            conditions.append(frappe.qb.Field("company") == self.filters.company)
+        if self.filters.get("from_date"):
+            conditions.append(frappe.qb.Field("posting_date") >= self.filters.from_date)
+        if self.filters.get("to_date"):
+            conditions.append(frappe.qb.Field("posting_date") <= self.filters.to_date)
+        if self.filters.get("company_address"):
+            conditions.append(frappe.qb.Field("company_address") == self.filters.company_address)
+        if self.filters.get("company_gstin"):
+            conditions.append(frappe.qb.Field("company_gstin") == self.filters.company_gstin)
 
-        for opts in (
-            ("company", " and company=%(company)s"),
-            ("from_date", " and posting_date>=%(from_date)s"),
-            ("to_date", " and posting_date<=%(to_date)s"),
-            ("company_address", " and company_address=%(company_address)s"),
-            ("company_gstin", " and company_gstin=%(company_gstin)s"),
-        ):
-            if self.filters.get(opts[0]):
-                conditions += opts[1]
-
-        if self.filters.get("type_of_business") == "B2B":
-            conditions += (
-                "AND IFNULL(gst_category, '') not in ('Unregistered', 'Overseas') AND is_return != 1 AND"
-                " is_debit_note !=1"
-            )
-
-        if self.filters.get("type_of_business") == "B2C Large":
-            # get_b2c_limit hardcoded
-            conditions += """
-                AND ifnull(SUBSTR(place_of_supply, 1, 2),'') != ifnull(SUBSTR(company_gstin, 1, 2),'')
-                AND grand_total >  (
-                    CASE
-                        WHEN posting_date <= '2024-07-31' THEN 250000
-                        ELSE 100000
-                    END
-                )
-                AND is_return != 1
-                AND is_debit_note !=1
-                AND IFNULL(gst_category, "") in ('Unregistered', 'Overseas')
-                AND SUBSTR(place_of_supply, 1, 2) != '96'
-            """
-
-        elif self.filters.get("type_of_business") == "B2C Small":
-            # get_b2c_limit hardcoded
-            conditions += """
-                AND (
-                    SUBSTR(place_of_supply, 1, 2) = SUBSTR(company_gstin, 1, 2)
-                    OR grand_total <= (
-                        CASE
-                            WHEN posting_date <= '2024-07-31' THEN 250000
-                            ELSE 100000
-                        END
-                    )
-                )
-                AND IFNULL(gst_category, "") in ('Unregistered', 'Overseas')
-                AND SUBSTR(place_of_supply, 1, 2) != '96'
-            """
-
-        elif self.filters.get("type_of_business") == "CDNR-REG":
-            conditions += """ AND (is_return = 1 OR is_debit_note = 1) AND IFNULL(gst_category, '') not in ('Unregistered', 'Overseas')"""
-
-        elif self.filters.get("type_of_business") == "CDNR-UNREG":
-            conditions += """ AND ifnull(SUBSTR(place_of_supply, 1, 2),'') != ifnull(SUBSTR(company_gstin, 1, 2),'')
-                AND (is_return = 1 OR is_debit_note = 1)
-                AND IFNULL(gst_category, '') in ('Unregistered', 'Overseas')"""
-
-        elif self.filters.get("type_of_business") == "EXPORT":
-            conditions += """ AND is_return !=1 and gst_category = 'Overseas' and place_of_supply = '96-Other Countries' """
-
-        elif self.filters.get("type_of_business") == "NIL Rated":
-            conditions += """ AND IFNULL(place_of_supply, '') != '96-Other Countries' and IFNULL(gst_category, '') != 'Overseas'"""
-
-        conditions += " AND IFNULL(billing_address_gstin, '') != company_gstin"
-
+        # Type of business specific conditions
+        type_of_business = self.filters.get("type_of_business")
+        
+        if type_of_business == "B2B":
+            conditions.extend([
+                IfNull(frappe.qb.Field("gst_category"), "").notin(["Unregistered", "Overseas"]),
+                frappe.qb.Field("is_return") != 1,
+                frappe.qb.Field("is_debit_note") != 1
+            ])
+        
+        elif type_of_business == "B2C Large":
+            conditions.extend([
+                IfNull(frappe.qb.Field("place_of_supply").substr(1, 2), "") != IfNull(frappe.qb.Field("company_gstin").substr(1, 2), ""),
+                frappe.qb.Field("grand_total") > Case()
+                    .when(frappe.qb.Field("posting_date") <= "2024-07-31", 250000)
+                    .else_(100000),
+                frappe.qb.Field("is_return") != 1,
+                frappe.qb.Field("is_debit_note") != 1,
+                IfNull(frappe.qb.Field("gst_category"), "").isin(["Unregistered", "Overseas"]),
+                frappe.qb.Field("place_of_supply").substr(1, 2) != "96"
+            ])
+        
+        elif type_of_business == "B2C Small":
+            conditions.extend([
+                (frappe.qb.Field("place_of_supply").substr(1, 2) == frappe.qb.Field("company_gstin").substr(1, 2))
+                | (frappe.qb.Field("grand_total") <= Case()
+                    .when(frappe.qb.Field("posting_date") <= "2024-07-31", 250000)
+                    .else_(100000)),
+                IfNull(frappe.qb.Field("gst_category"), "").isin(["Unregistered", "Overseas"]),
+                frappe.qb.Field("place_of_supply").substr(1, 2) != "96"
+            ])
+        
+        elif type_of_business == "CDNR-REG":
+            conditions.extend([
+                (frappe.qb.Field("is_return") == 1) | (frappe.qb.Field("is_debit_note") == 1),
+                IfNull(frappe.qb.Field("gst_category"), "").notin(["Unregistered", "Overseas"])
+            ])
+        
+        elif type_of_business == "CDNR-UNREG":
+            conditions.extend([
+                IfNull(frappe.qb.Field("place_of_supply").substr(1, 2), "") != IfNull(frappe.qb.Field("company_gstin").substr(1, 2), ""),
+                (frappe.qb.Field("is_return") == 1) | (frappe.qb.Field("is_debit_note") == 1),
+                IfNull(frappe.qb.Field("gst_category"), "").isin(["Unregistered", "Overseas"])
+            ])
+        
+        elif type_of_business == "EXPORT":
+            conditions.extend([
+                frappe.qb.Field("is_return") != 1,
+                frappe.qb.Field("gst_category") == "Overseas",
+                frappe.qb.Field("place_of_supply") == "96-Other Countries"
+            ])
+        
+        elif type_of_business == "NIL Rated":
+            conditions.extend([
+                IfNull(frappe.qb.Field("place_of_supply"), "") != "96-Other Countries",
+                IfNull(frappe.qb.Field("gst_category"), "") != "Overseas"
+            ])
+        
+        # Common condition for all types
+        conditions.append(IfNull(frappe.qb.Field("billing_address_gstin"), "") != frappe.qb.Field("company_gstin"))
+        
         return conditions
 
+    def get_hsn_conditions(self,filters):
+        conditions = []
+        
+        if filters.get("company"):
+            conditions.append(frappe.qb.Field("company") == filters.company)
+        if filters.get("gst_hsn_code"):
+            conditions.append(frappe.qb.Field("gst_hsn_code") == filters.gst_hsn_code)
+        if filters.get("company_gstin"):
+            conditions.append(frappe.qb.Field("company_gstin") == filters.company_gstin)
+        if filters.get("from_date"):
+            conditions.append(frappe.qb.Field("posting_date") >= filters.from_date)
+        if filters.get("to_date"):
+            conditions.append(frappe.qb.Field("posting_date") <= filters.to_date)
+        
+        return conditions
     def get_invoice_items(self):
         """
         Creates object invoice_items and nil_exempt_non_gst.
-
-        Example invoice_items:
-            {
-                "INV-001": {
-                    "item_code": taxable_value
-                }
-            }
-
-        Example nil_exempt_non_gst:
-            {
-                "INV-001": [nil_rated, exempted, non_gst]
-            }
         """
         self.invoice_items = frappe._dict()
         self.nil_exempt_non_gst = {}
 
-        items = frappe.db.sql(
-            """
-            select item_code, item_name, parent, taxable_value, item_tax_rate, gst_treatment
-            from `tab%s Item`
-            where parent in (%s)
-        """
-            % (self.doctype, ", ".join(["%s"] * len(self.invoices))),
-            tuple(self.invoices),
-            as_dict=1,
-        )
+        si_item = frappe.qb.DocType(f"{self.doctype} Item")
+        query = (
+            frappe.qb.from_(si_item)
+            .select(
+                si_item.item_code,
+                si_item.item_name,
+                si_item.parent,
+                si_item.taxable_value,
+                si_item.item_tax_rate,
+                si_item.gst_treatment
+            )
+            .where(si_item.parent.isin(list(self.invoices.keys()))))
+        
+        items = query.run(as_dict=True)
 
         for d in items:
             item_code = d.item_code or d.item_name
@@ -512,35 +528,26 @@ class Gstr1Report:
     def get_invoice_wise_tax_details(self):
         """
         Returns item wise tax details for each invoice.
-
-        Important: Only Updates Tax amounts and Tax Rates.
-        Taxable value is updated in get_invoice_tax_rate_info
-
-        Example:
-            {
-                "INV-001": {
-                    "item_code": {
-                        "tax_rate": 5,
-                        "cess_amount": 0,
-                        "taxable_value": 0
-                    }
-                }
-            }
         """
         unidentified_gst_accounts = set()
-        invoice_tax_details = frappe.db.sql(
-            """
-            select
-                parent, account_head, item_wise_tax_detail,gst_tax_type
-            from `tab%s`
-            where
-                parenttype = %s and docstatus = 1
-                and parent in (%s)
-            order by account_head
-        """
-            % (self.tax_doctype, "%s", ", ".join(["%s"] * len(self.invoices.keys()))),
-            tuple([self.doctype] + list(self.invoices.keys())),
+        taxes = frappe.qb.DocType(self.tax_doctype)
+        
+        query = (
+            frappe.qb.from_(taxes)
+            .select(
+                taxes.parent,
+                taxes.account_head,
+                taxes.item_wise_tax_detail,
+                taxes.gst_tax_type
+            )
+            .where(taxes.parenttype == self.doctype)
+            .where(taxes.docstatus == 1)
+            .where(taxes.parent.isin(list(self.invoices.keys())))
+            .orderby(taxes.account_head)
         )
+        
+        invoice_tax_details = query.run()
+
         invoice_item_wise_tax_details = frappe._dict()
 
         for parent, account, item_wise_tax_detail, gst_tax_type in invoice_tax_details:
