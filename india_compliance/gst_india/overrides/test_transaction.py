@@ -133,7 +133,7 @@ class TestTransaction(FrappeTestCase):
             doc.taxes[0],
         )
         if doc.doctype == 'Purchase Invoice':
-            self.validate_gl_entries(doc)
+            self.validate_gl_entries_for_pi_with_rcm_to_unregistered_supplier_TC_ACC_073(doc)
 
     def validate_gl_entries_for_pi_with_rcm_to_unregistered_supplier_TC_ACC_073(self, doc):
         gl_entries = frappe.get_all(
