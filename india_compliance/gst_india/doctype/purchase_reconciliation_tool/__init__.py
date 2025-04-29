@@ -15,7 +15,7 @@ from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
     get_accounting_dimensions,
 )
 
-from india_compliance.gst_india.constants import GST_TAX_TYPES
+from india_compliance.gst_india.constants import GST_TAX_TYPES, TAXABLE_GST_TREATMENTS
 from india_compliance.gst_india.utils import get_gstin_list, get_party_for_gstin
 from india_compliance.gst_india.utils.gstr_2 import IMPORT_CATEGORY, ReturnType
 
@@ -403,7 +403,7 @@ class PurchaseInvoice:
             .where(self.PI.gst_category.isin(gst_category))
             .where(self.PI.is_return == is_return)
         )
-        
+
         data = query.run(as_dict=True)
 
         for doc in data:
@@ -422,6 +422,7 @@ class PurchaseInvoice:
             .where(IfNull(self.PI.reconciliation_status, "") != "Not Applicable")
             .where(self.PI.is_opening == "No")
             .where(self.PI_ITEM.parenttype == "Purchase Invoice")
+            .where(self.PI_ITEM.gst_treatment.isin(TAXABLE_GST_TREATMENTS))
             .groupby(self.PI.name)
             .select(
                 *fields,
@@ -468,7 +469,7 @@ class PurchaseInvoice:
                 # Default to posting date if bill date is not available.
                 Case()
                 .when(
-                    IfNull(self.PI.bill_date, None) == None,
+                    IfNull(self.PI.bill_date, "") == "",
                     self.PI.posting_date,
                 )
                 .else_(self.PI.bill_date)
@@ -572,13 +573,8 @@ class BillOfEntry:
             .where(self.BOE.docstatus == 1)
             .where(IfNull(self.BOE.reconciliation_status, "") != "Not Applicable")
             .where(self.BOE_ITEM.parenttype == "Bill of Entry")
-            .groupby(self.BOE.name,
-                    self.PI.supplier_name,
-                    self.PI.is_reverse_charge,
-                    self.PI.gst_category,
-                    self.PI.supplier_gstin,
-                    self.PI.place_of_supply
-            )
+            .where(self.BOE_ITEM.gst_treatment.isin(TAXABLE_GST_TREATMENTS))
+            .groupby(self.BOE.name)
             .select(*fields, ConstantColumn("Bill of Entry").as_("doctype"))
         )
 
@@ -809,7 +805,7 @@ class Reconciler(BaseReconciliation):
                     inward_supplies[supplier_gstin].copy().items()
                 ):
                     if (
-                        match_status == "Residual Match"
+                        match_status == MatchStatus.RESIDUAL_MATCH.value
                         and self.category != "CDNR"
                         and abs((purchase.bill_date - inward_supply.bill_date).days)
                         > 10
@@ -818,6 +814,12 @@ class Reconciler(BaseReconciliation):
 
                     if not self.is_doc_matching(purchase, inward_supply, rules):
                         continue
+
+                    if match_status == MatchStatus.RESIDUAL_MATCH.value:
+                        if inward_supply.supplier_gstin == purchase.supplier_gstin:
+                            match_status = MatchStatus.SUGGESTED_MATCH.value
+                        else:
+                            match_status = MatchStatus.MISMATCH.value
 
                     self.update_matching_doc(
                         match_status,
@@ -915,10 +917,6 @@ class Reconciler(BaseReconciliation):
         self, match_status, purchase_invoice_name, inward_supply_name, link_doctype
     ):
         """Update matching doc for records."""
-
-        if match_status == "Residual Match":
-            match_status = "Mismatch"
-
         inward_supply_fields = {
             "match_status": match_status,
             "link_doctype": link_doctype,
