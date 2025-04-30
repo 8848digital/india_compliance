@@ -1544,6 +1544,7 @@ def set_reverse_charge_as_per_gst_settings(doc):
         or not doc.gst_category == "Unregistered"
         or (doc.grand_total and doc.grand_total <= gst_settings.rcm_threshold)
         or doc.get("is_opening") == "Yes"
+        or not doc.get("place_of_supply")
     ):
         return
 
@@ -1595,12 +1596,12 @@ def set_reverse_charge(doc):
     doc.set("taxes", template)
 
 
-def validate_gstin_status(gstin, transaction_date):
+def validate_gstin_status(gstin, doc):
     settings = frappe.get_cached_doc("GST Settings")
     if not settings.validate_gstin_status:
         return
 
-    get_and_validate_gstin_status(gstin, transaction_date)
+    get_and_validate_gstin_status(gstin, doc)
 
 
 def validate_gst_transporter_id(doc):
@@ -1688,7 +1689,7 @@ def validate_transaction(doc, method=None):
     else:
         gstin = doc.supplier_gstin
 
-    validate_gstin_status(gstin, doc.get("posting_date") or doc.get("transaction_date"))
+    validate_gstin_status(gstin, doc)
     validate_gst_transporter_id(doc)
     validate_ecommerce_gstin(doc)
 
