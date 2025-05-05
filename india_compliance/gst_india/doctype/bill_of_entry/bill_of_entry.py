@@ -449,12 +449,12 @@ class BillofEntry(Document):
 
         (
             frappe.qb.update(pi_item)
-            .join(submitted_boe_qty)
-            .on(pi_item.name == submitted_boe_qty.pi_detail)
             .set(
                 pi_item.pending_boe_qty,
                 pi_item.qty - submitted_boe_qty.qty,
             )
+            .from_(submitted_boe_qty)
+            .where(pi_item.name == submitted_boe_qty.pi_detail)
             .where(pi_item.name.isin(pi_item_names))
             .run()
         )
