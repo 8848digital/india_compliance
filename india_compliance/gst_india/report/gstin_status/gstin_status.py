@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.query_builder import Case, Order
 from frappe.query_builder.functions import IfNull, IsNull, LiteralValue
+from pypika.terms import ValueWrapper
 
 
 def execute(filters: dict | None = None):
@@ -125,7 +126,7 @@ class GSTINDetailedReport:
             gstin.last_updated_on,
             gstin.cancelled_date,
             Case()
-            .when(IsNull(gstin.is_blocked), "")
+           .when(gstin.is_blocked.isnull(), ValueWrapper(""))
             .when(gstin.is_blocked == 0, "No")
             .else_("Yes")
             .as_("is_blocked"),
