@@ -4,6 +4,8 @@
 import frappe
 from frappe import _
 from frappe.query_builder.custom import GROUP_CONCAT
+from pypika.terms import ValueWrapper
+from pypika.terms import CustomFunction
 
 
 def execute(filters=None):
@@ -77,24 +79,26 @@ def update_journal_entry_for_payment(query):
         query.left_join(journal_entry_account)
         .on(bill_of_entry.name == journal_entry_account.reference_name)
         .select(journal_entry_account.parent.as_("payment_journal_entry"))
+        .groupby(journal_entry_account.parent.as_("payment_journal_entry"))
     )
 
 
 def update_purchase_invoice_query(query):
+    STRING_AGG = CustomFunction("STRING_AGG", ["field", "delimiter"])
     bill_of_entry = frappe.qb.DocType("Bill of Entry")
     bill_of_entry_item = frappe.qb.DocType("Bill of Entry Item")
     purchase_invoice = frappe.qb.DocType("Purchase Invoice")
-
     return (
         query.join(bill_of_entry_item)
         .on(bill_of_entry_item.parent == bill_of_entry.name)
         .left_join(purchase_invoice)
         .on(purchase_invoice.name == bill_of_entry_item.purchase_invoice)
         .select(
-            GROUP_CONCAT(purchase_invoice.name, ",").as_("purchase_invoice"),
+           STRING_AGG(purchase_invoice.name, ValueWrapper(",")).as_("purchase_invoice"),
             purchase_invoice.supplier,
         )
         .groupby(bill_of_entry.name)
+        .groupby( purchase_invoice.supplier)
     )
 
 
