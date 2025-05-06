@@ -11,7 +11,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import IfNull, Sum
 from frappe.utils import cint, cstr, flt, get_first_day, get_last_day
-
+from frappe.query_builder import Field
 from india_compliance.gst_india.constants import INVOICE_DOCTYPES, STATE_NUMBERS
 from india_compliance.gst_india.overrides.transaction import is_inter_state_supply
 from india_compliance.gst_india.report.gstr_1.gstr_1 import GSTR11A11BData
@@ -343,26 +343,34 @@ class GSTR3BReport(Document):
             self.report_dict["itc_elg"]["itc_inelg"][0][tax_amount_key] += entry.amount
 
     def get_inward_nil_exempt(self, state):
-        inward_nil_exempt = frappe.db.sql(
-            """
-            SELECT p.place_of_supply, p.supplier_address,
-            i.taxable_value, i.gst_treatment
-            FROM `tabPurchase Invoice` p , `tabPurchase Invoice Item` i
-            WHERE p.docstatus = 1 and p.name = i.parent
-            and p.is_opening = 'No'
-            and p.company_gstin != IFNULL(p.supplier_gstin, "")
-            and (i.gst_treatment != 'Taxable' or p.gst_category = 'Registered Composition') and
-            p.posting_date between %s and %s
-            and p.company = %s and p.company_gstin = %s
-            """,
-            (
-                self.from_date,
-                self.to_date,
-                self.company,
-                self.gst_details.get("gstin"),
-            ),
-            as_dict=1,
+        PurchaseInvoice =  frappe.qb.DocType("Purchase Invoice")
+        PurchaseInvoiceItem =  frappe.qb.DocType("Purchase Invoice Item")
+
+        query = (
+            frappe.qb.from_(PurchaseInvoice)
+            .join(PurchaseInvoiceItem)
+            .on(PurchaseInvoice.name == PurchaseInvoiceItem.parent)
+            .select(
+                PurchaseInvoice.place_of_supply,
+                PurchaseInvoice.supplier_address,
+                PurchaseInvoiceItem.taxable_value,
+                PurchaseInvoiceItem.gst_treatment,
+            )
+            .where(
+                (PurchaseInvoice.docstatus == 1)
+                & (PurchaseInvoice.is_opening == "No")
+                & (PurchaseInvoice.company_gstin != IfNull(PurchaseInvoice.supplier_gstin, ""))
+                & (
+                    (PurchaseInvoiceItem.gst_treatment != "Taxable")
+                    | (PurchaseInvoice.gst_category == "Registered Composition")
+                )
+                & (PurchaseInvoice.posting_date.between(self.from_date, self.to_date))
+                & (PurchaseInvoice.company == self.company)
+                & (PurchaseInvoice.company_gstin == self.gst_details.get("gstin"))
+            )
         )
+
+        inward_nil_exempt = query.run(as_dict=True)
 
         inward_nil_exempt_details = {
             "gst": {"intra": 0.0, "inter": 0.0},
@@ -376,9 +384,7 @@ class GSTR3BReport(Document):
                 d.place_of_supply = "00-" + cstr(state)
 
             supplier_state = address_state_map.get(d.supplier_address) or state
-            is_intra_state = cstr(supplier_state) == cstr(
-                d.place_of_supply.split("-")[1]
-            )
+            is_intra_state = cstr(supplier_state) == cstr(d.place_of_supply.split("-")[1])
             amount = flt(d.taxable_value, 2)
 
             if d.gst_treatment != "Non-GST":
@@ -542,16 +548,26 @@ class GSTR3BReport(Document):
     def get_outward_items(self, doctype):
         if not self.invoice_map:
             return {}
-        tax_fields = [f"{tax}_amount" for tax in GST_TAX_TYPE_MAP]
-        fields = tax_fields + ["item_code", "item_name", "parent", "taxable_value", "gst_treatment"]
-        
-        item_details = frappe.qb.from_(f"`tab{doctype} Item`").select(
-            *fields
-        ).where(
-            f"parent IN {tuple(self.invoice_map)}"
-        ).run(as_dict=True)
+        table = frappe.qb.DocType(f"{doctype} Item")
+        fields = [
+            table.item_code,
+            table.item_name,
+            table.parent,
+            table.taxable_value,
+            table.gst_treatment,
+        ]
+        for tax in GST_TAX_TYPE_MAP:
+            fields.append(table[f"{tax}_amount"])
 
-        return item_details
+        invoice_list = list(self.invoice_map.keys())
+
+        query = (
+            frappe.qb.from_(table)
+            .select(*fields)
+            .where(table.parent.isin(invoice_list))
+        )
+
+        return query.run(as_dict=True)
 
     def set_outward_taxable_supplies(self):
         inter_state_supply_details = {}
@@ -667,32 +683,31 @@ class GSTR3BReport(Document):
 
         for doctype in INVOICE_DOCTYPES:
             party_gstin = (
-                "billing_address_gstin"
-                if doctype == "Sales Invoice"
-                else "supplier_gstin"
+                "billing_address_gstin" if doctype == "Sales Invoice" else "supplier_gstin"
             )
-            docnames = frappe.db.sql(
-                f"""
-                    SELECT name FROM `tab{doctype}`
-                    WHERE docstatus = 1 and is_opening = 'No'
-                    and posting_date between %s and %s
-                    and company = %s and place_of_supply IS NULL
-                    and company_gstin != IFNULL({party_gstin},"")
-                    and gst_category != 'Overseas'
-                """,
-                (
-                    self.from_date,
-                    self.to_date,
-                    self.company,
-                ),
-                as_dict=1,
-            )  # nosec
+
+            invoice = frappe.qb.DocType(doctype)
+
+            query = (
+                frappe.qb.from_(invoice)
+                .select(invoice.name)
+                .where(
+                    (invoice.docstatus == 1)
+                    & (invoice.is_opening == "No")
+                    & (invoice.posting_date.between(self.from_date, self.to_date))
+                    & (invoice.company == self.company)
+                    & (invoice.place_of_supply.isnull())
+                    & (invoice.company_gstin != IfNull(Field(party_gstin), ""))
+                    & (invoice.gst_category != "Overseas")
+                )
+            )
+
+            docnames = query.run(as_dict=True)
 
             for d in docnames:
                 missing_field_invoices.append(d.name)
 
         return ",".join(missing_field_invoices)
-
 
 def get_address_state_map():
     return frappe._dict(
