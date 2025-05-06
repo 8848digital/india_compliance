@@ -542,20 +542,14 @@ class GSTR3BReport(Document):
     def get_outward_items(self, doctype):
         if not self.invoice_map:
             return {}
-
-        tax_fields = ", ".join(f"{tax}_amount" for tax in GST_TAX_TYPE_MAP)
-
-        item_details = frappe.db.sql(
-            f"""
-            SELECT
-               {tax_fields}, item_code, item_name, parent, taxable_value, gst_treatment
-            FROM
-                `tab{doctype} Item`
-            WHERE parent in ({", ".join(["%s"] * len(self.invoice_map))})
-            """,
-            tuple(self.invoice_map),
-            as_dict=1,
-        )
+        tax_fields = [f"{tax}_amount" for tax in GST_TAX_TYPE_MAP]
+        fields = tax_fields + ["item_code", "item_name", "parent", "taxable_value", "gst_treatment"]
+        
+        item_details = frappe.qb.from_(f"`tab{doctype} Item`").select(
+            *fields
+        ).where(
+            f"parent IN {tuple(self.invoice_map)}"
+        ).run(as_dict=True)
 
         return item_details
 
