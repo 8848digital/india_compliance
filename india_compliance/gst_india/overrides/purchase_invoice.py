@@ -7,15 +7,10 @@ from india_compliance.gst_india.constants import GST_TAX_TYPES
 from india_compliance.gst_india.overrides.sales_invoice import (
     update_dashboard_with_gst_logs,
 )
-
 from india_compliance.gst_india.overrides.transaction import (
-    validate_hsn_codes as _validate_hsn_codes,
-)
-
-from india_compliance.gst_india.overrides.transaction import (
+    _validate_hsn_codes,
     validate_transaction,
 )
-
 from india_compliance.gst_india.utils import is_api_enabled, validate_invoice_number
 from india_compliance.gst_india.utils.e_waybill import get_e_waybill_info
 
@@ -62,6 +57,7 @@ def validate(doc, method=None):
     set_reconciliation_status(doc)
     set_pending_boe_qty(doc)
 
+
 def on_cancel(doc, method=None):
     frappe.db.set_value(
         "GST Inward Supply",
@@ -83,9 +79,11 @@ def set_reconciliation_status(doc):
 
     doc.reconciliation_status = reconciliation_status
 
+
 def set_pending_boe_qty(doc):
     for item in doc.items:
         item.pending_boe_qty = item.qty
+
 
 def is_b2b_invoice(doc):
     return not (
@@ -161,7 +159,7 @@ def validate_with_inward_supply(doc):
         return
 
     mismatch_fields = {}
-    
+
     taxable_value_precision = get_field_precision(
         frappe.get_meta("GST Inward Supply").get_field("taxable_value")
     )
@@ -199,7 +197,6 @@ def validate_with_inward_supply(doc):
 
         mismatch_fields[tax.upper()] = doc._inward_supply.get(tax)
 
-
     if mismatch_fields:
         message = (
             "Purchase Invoice does not match with releted GST Inward Supply.<br>"
@@ -207,18 +204,17 @@ def validate_with_inward_supply(doc):
         )
         for field, value in mismatch_fields.items():
             message += f"<br>{field}: {value}"
-
         frappe.msgprint(
             _(message),
             title=_("Mismatch with GST Inward Supply"),
         )
-
     elif doc._action == "submit":
         frappe.msgprint(
             _("Invoice matched with GST Inward Supply"),
             alert=True,
             indicator="green",
         )
+
 
 def get_tax_amount(taxes, gst_tax_type):
     if not (taxes or gst_tax_type):
@@ -229,6 +225,7 @@ def get_tax_amount(taxes, gst_tax_type):
         for tax in taxes
         if tax.gst_tax_type == gst_tax_type
     )
+
 
 def set_ineligibility_reason(doc, show_alert=True):
     doc.ineligibility_reason = ""
@@ -266,6 +263,7 @@ def validate_hsn_codes(doc):
 
     _validate_hsn_codes(
         doc,
+        valid_hsn_length=[4, 6, 8],
         throw=True,
-        message="GST HSN Code is mandatory for Overseas Purchase Invoice.<br>",
+        message=_("GST HSN Code is mandatory for Overseas Purchase Invoice.<br>"),
     )
