@@ -7,7 +7,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.model.mapper import get_mapped_doc
-from frappe.query_builder.functions import Sum
+from frappe.query_builder.functions import IfNull, Sum
 from frappe.utils import today
 import erpnext
 from erpnext.accounts.general_ledger import make_gl_entries, make_reverse_gl_entries
@@ -437,19 +437,18 @@ class BillofEntry(Document):
         submitted_boe_qty = (
             frappe.qb.from_(boe_item)
             .select(boe_item.pi_detail, Sum(boe_item.qty).as_("qty"))
-            .where(boe_item.pi_detail.isin(pi_item_names))
-            .where(boe_item.docstatus == 1)
+            .where((boe_item.pi_detail.isin(pi_item_names)) & (boe_item.docstatus == 1))
             .groupby(boe_item.pi_detail)
-        )
+        ).as_("submitted_boe_qty")
 
         (
             frappe.qb.update(pi_item)
+            .left_join(submitted_boe_qty)
+            .on(pi_item.name == submitted_boe_qty.pi_detail)
             .set(
                 pi_item.pending_boe_qty,
-                pi_item.qty - submitted_boe_qty.qty,
+                pi_item.qty - IfNull(submitted_boe_qty.qty, 0),
             )
-            .from_(submitted_boe_qty)
-            .where(pi_item.name == submitted_boe_qty.pi_detail)
             .where(pi_item.name.isin(pi_item_names))
             .run()
         )
