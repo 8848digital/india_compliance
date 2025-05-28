@@ -970,10 +970,7 @@ class TestHSNSUM(FrappeTestCase):
         self.assertDictEqual(self.json_data, output)
 
 
-<<<<<<< HEAD
-class TestAT(FrappeTestCase):
-    =======
-class TestHSNSUM_With_Bifurcation(IntegrationTestCase):
+class TestHSNSUM_With_Bifurcation(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -1049,8 +1046,7 @@ class TestHSNSUM_With_Bifurcation(IntegrationTestCase):
         self.assertDictEqual(self.json_data, output)
 
 
-class TestAT(IntegrationTestCase):
->>>>>>> 99c09e54 (fix: Update Implementation for HSN_B2B and HSN_B2C Bifurcation (#3222))
+class TestAT(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
