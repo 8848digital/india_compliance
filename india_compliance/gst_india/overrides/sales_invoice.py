@@ -1,7 +1,11 @@
 import frappe
 from frappe import _, bold
 from frappe.desk.form.load import run_onload
+<<<<<<< HEAD
 from frappe.utils import add_days, date_diff, flt, fmt_money
+=======
+from frappe.utils import add_days, flt, fmt_money, get_datetime
+>>>>>>> 9bf6fdf9 (fix: date comparison in cancel_e_waybill_e_invoice function)
 
 from india_compliance.gst_india.overrides.payment_entry import get_taxes_summary
 from india_compliance.gst_india.overrides.transaction import (
@@ -257,7 +261,11 @@ def cancel_e_waybill_e_invoice(doc, method=None):
             generated_on = doc.get_onload().get("e_waybill_info", {}).get("created_on")
             reason = gst_settings.reason_for_e_waybill_cancellation
 
+<<<<<<< HEAD
         if not generated_on or date_diff(add_days(generated_on, 1), generated_on) > 1:
+=======
+        if not generated_on or (add_days(generated_on, 1) < get_datetime()):
+>>>>>>> 9bf6fdf9 (fix: date comparison in cancel_e_waybill_e_invoice function)
             return
 
         values = frappe._dict(
