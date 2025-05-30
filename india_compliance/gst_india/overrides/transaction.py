@@ -1543,7 +1543,12 @@ class ItemGSTDetails:
 
     def get_item_tax_amount(self, item, tax_rate, tax):
         precision = self.precision.get(f"{tax}_amount")
-        multiplier = item.qty if tax == "cess_non_advol" else item.taxable_value / 100
+
+        if tax == "cess_non_advol":
+            multiplier = item.qty or 0
+        else:
+            taxable_value = item.taxable_value if item.taxable_value is not None else 0
+            multiplier = taxable_value / 100
 
         return flt(tax_rate * multiplier, precision)
 
