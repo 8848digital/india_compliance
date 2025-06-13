@@ -63,8 +63,9 @@ def make_default_gst_expense_accounts(company):
 
 @frappe.whitelist()
 def make_default_tax_templates(company: str, gst_rate=None):
+    frappe.set_user("Administrator")
     frappe.has_permission("Company", ptype="write", doc=company, throw=True)
-
+    frappe.set_user(frappe.session.user)
     default_taxes = get_tax_defaults(gst_rate)
     from_detailed_data(company, default_taxes)
     update_gst_settings(company)
@@ -240,7 +241,7 @@ def create_default_company_account(
     )
     account.flags.ignore_permissions = True
     account.flags.ignore_root_company_validation = True
-    account.insert(ignore_if_duplicate=True)
+    account.insert(ignore_if_duplicate=True, ignore_mandatory=True)
 
     if default_fieldname and not frappe.db.get_value(
         "Company", company, default_fieldname
