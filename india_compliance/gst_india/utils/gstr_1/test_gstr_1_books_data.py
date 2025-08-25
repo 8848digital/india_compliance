@@ -1,5 +1,5 @@
 import frappe
-from frappe.tests import IntegrationTestCase, change_settings
+from frappe.tests.utils import FrappeTestCase, change_settings
 from frappe.utils import flt, getdate
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_sales_return
 
@@ -32,7 +32,7 @@ FILTERS = frappe._dict(
 )
 
 
-class TestGSTR1BooksData(IntegrationTestCase):
+class TestGSTR1BooksData(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
