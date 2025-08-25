@@ -100,7 +100,8 @@ PREVIOUS_VERSION = {
     GSTR1_Category.HSN.value: (GSTR1_SubCategory.HSN,),
 }
 
-class GSTR1_DataField(Enum):
+
+class GSTR1_DataField:
     TRANSACTION_TYPE = "transaction_type"
     CUST_GSTIN = "customer_gstin"
     ECOMMERCE_GSTIN = "ecommerce_gstin"
@@ -359,6 +360,8 @@ SUBCATEGORIES_NOT_CONSIDERED_IN_TOTAL_TAX = [
     *SUBCATEGORIES_NOT_CONSIDERED_IN_TOTAL_TAXABLE_VALUE,
 ]
 
+
+HSN_BIFURCATION_FROM = getdate("2025-05-01")
 
 B2C_LIMIT = [
     ("2024-07-31", 2_50_000),
