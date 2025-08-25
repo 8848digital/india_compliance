@@ -8,11 +8,12 @@ import frappe
 from frappe.query_builder import Case
 from frappe.query_builder.functions import Date, IfNull, Sum
 from frappe.utils import getdate
-from india_compliance.gst_india.constants import GST_REFUND_TAX_TYPES
 
+from india_compliance.gst_india.constants import GST_REFUND_TAX_TYPES
 from india_compliance.gst_india.utils import get_full_gst_uom
 from india_compliance.gst_india.utils.gstr_1 import (
     CATEGORY_SUB_CATEGORY_MAPPING,
+    HSN_BIFURCATION_FROM,
     GSTR1_B2B_InvoiceType,
     GSTR1_Category,
     GSTR1_SubCategory,
@@ -174,7 +175,7 @@ class GSTR1Query:
             )
 
         return query
-    
+
     def get_taxes_query(self):
         return (
             frappe.qb.from_(self.si_taxes)
@@ -202,7 +203,6 @@ class GSTR1Query:
                     0,
                 )
                 - IfNull(self.taxes_query.refund_amount, 0)
-
             ).as_(key)
         )
 
@@ -220,7 +220,6 @@ def cache_invoice_condition(func):
 
 
 class GSTR1Conditions:
-
     @cache_invoice_condition
     def is_nil_rated(self, invoice):
         return invoice.gst_treatment == "Nil-Rated"
@@ -251,7 +250,10 @@ class GSTR1Conditions:
 
     @cache_invoice_condition
     def is_export(self, invoice):
-        return invoice.place_of_supply == "96-Other Countries"
+        return (
+            invoice.place_of_supply == "96-Other Countries"
+            and invoice.gst_category == "Overseas"
+        )
 
     @cache_invoice_condition
     def is_inter_state(self, invoice):
@@ -339,7 +341,6 @@ class GSTR1CategoryConditions(GSTR1Conditions):
 
 
 class GSTR1Subcategory(GSTR1CategoryConditions):
-
     def set_for_b2b(self, invoice):
         self._set_invoice_type_for_b2b_and_cdnr(invoice)
 
@@ -417,6 +418,16 @@ class GSTR1Subcategory(GSTR1CategoryConditions):
             invoice.invoice_type = GSTR1_B2B_InvoiceType.R.value
             invoice.invoice_sub_category = GSTR1_SubCategory.B2B_REGULAR.value
 
+    def set_hsn_sub_category(self, invoice, bifurcate_hsn):
+        if not bifurcate_hsn:
+            invoice.hsn_sub_category = GSTR1_SubCategory.HSN.value
+
+        elif invoice.gst_category in ("Unregistered", "Overseas"):
+            invoice.hsn_sub_category = GSTR1_SubCategory.HSN_B2C.value
+
+        else:
+            invoice.hsn_sub_category = GSTR1_SubCategory.HSN_B2B.value
+
 
 class GSTR1Invoices(GSTR1Query, GSTR1Subcategory):
     AMOUNT_FIELDS = {
@@ -430,12 +441,17 @@ class GSTR1Invoices(GSTR1Query, GSTR1Subcategory):
     def __init__(self, filters=None):
         super().__init__(filters)
 
-    def process_invoices(self, invoices):
+    def process_invoices(self, invoices, bifurcate_hsn=None):
         settings = frappe.get_cached_doc("GST Settings")
         identified_uom = {}
+
+        if bifurcate_hsn is None:
+            bifurcate_hsn = self.is_hsn_bifurcation_needed()
+
         for invoice in invoices:
             self.invoice_conditions = {}
             self.assign_categories(invoice)
+            self.set_hsn_sub_category(invoice, bifurcate_hsn)
 
             if invoice.gst_hsn_code and invoice.gst_hsn_code.startswith("99"):
                 invoice["uom"] = "OTH-OTHERS"
@@ -491,34 +507,6 @@ class GSTR1Invoices(GSTR1Query, GSTR1Subcategory):
                 Sum(query.total_amount).as_("total_amount"),
             )
             .groupby(
-                query.qty,
-                query.billing_address_gstin,
-                query.company_gstin,
-                query.customer_name,
-                query.posting_date,
-                query.place_of_supply,
-                query.is_reverse_charge,
-                query.ecommerce_gstin,
-                query.is_return,
-                query.is_debit_note,
-                query.return_against,
-                query.is_export_with_gst,
-                query.shipping_port_code,
-                query.shipping_bill_number,
-                query.shipping_bill_date,
-                query.invoice_total,
-                query.returned_invoice_total,
-                query.gst_category,
-                query.taxable_value,
-                query.cgst_amount,
-                query.sgst_amount,
-                query.igst_amount,
-                query.cess_amount,
-                query.cess_non_advol_amount,
-                query.total_cess_amount,
-                query.total_tax,
-                query.total_amount,
-                query.item_code,
                 query.invoice_no,
                 query.gst_hsn_code,
                 query.gst_rate,
@@ -535,7 +523,6 @@ class GSTR1Invoices(GSTR1Query, GSTR1Subcategory):
     def get_filtered_invoices(
         self, invoices, invoice_category=None, invoice_sub_category=None
     ):
-
         filtered_invoices = []
         functions = CATEGORY_CONDITIONS.get(invoice_category)
         condition = getattr(self, functions["category"], None)
@@ -674,3 +661,14 @@ class GSTR1Invoices(GSTR1Query, GSTR1Subcategory):
                     "no_of_records": -len(overlaping_invoices),
                 }
             )
+
+    def is_hsn_bifurcation_needed(self):
+        # From GSTR-1 Beta
+        if self.filters.get("month_or_quarter"):
+            from_date = getdate(
+                f"01-{self.filters.month_or_quarter}-{self.filters.year}"
+            )
+        else:
+            from_date = getdate(self.filters.from_date)
+
+        return from_date >= HSN_BIFURCATION_FROM
