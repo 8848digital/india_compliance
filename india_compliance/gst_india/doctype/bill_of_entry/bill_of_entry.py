@@ -57,17 +57,14 @@ class BillofEntry(Document):
         self.set_taxes_and_totals()
         set_gst_tax_type(self)
 
-    def before_save(self):
-        update_gst_details(self)
-
     def before_submit(self):
         self.validate_qty()
-        update_gst_details(self)
 
     def validate(self):
         self.validate_purchase_invoice()
         self.validate_taxes()
         self.reconciliation_status = "Unreconciled"
+        update_gst_details(self)
         update_valuation_rate(self)
 
     def on_submit(self):
@@ -156,7 +153,6 @@ class BillofEntry(Document):
                     _("Company for Purchase Invoice {0} must be {1}").format(
                         invoice.name, self.company
                     )
-
                 )
 
             if invoice.company_gstin != self.company_gstin:
@@ -412,7 +408,6 @@ class BillofEntry(Document):
 
         set_missing_values(self)
 
-
     def validate_qty(self):
         pi_item_names = [item.pi_detail for item in self.items]
 
@@ -449,16 +444,15 @@ class BillofEntry(Document):
 
         (
             frappe.qb.update(pi_item)
-            .join(submitted_boe_qty)
-            .on(pi_item.name == submitted_boe_qty.pi_detail)
             .set(
                 pi_item.pending_boe_qty,
                 pi_item.qty - submitted_boe_qty.qty,
             )
+            .from_(submitted_boe_qty)
+            .where(pi_item.name == submitted_boe_qty.pi_detail)
             .where(pi_item.name.isin(pi_item_names))
             .run()
         )
-
 
 
 def set_missing_values(source, target=None):
@@ -520,7 +514,7 @@ def make_bill_of_entry(source_name, target_doc=None):
 
     def update_item_qty(source, target, source_parent):
         target.qty = source.get("pending_boe_qty")
-    
+
     doc = get_mapped_doc(
         "Purchase Invoice",
         source_name,
@@ -772,6 +766,9 @@ def get_purchase_invoice_details(boe):
 def get_pi_items(purchase_invoices):
     pi_item = frappe.qb.DocType("Purchase Invoice Item")
 
+    if not purchase_invoices:
+        purchase_invoices.append("")
+
     return (
         frappe.qb.from_(pi_item)
         .select(
@@ -791,8 +788,8 @@ def get_pi_items(purchase_invoices):
         .where(pi_item.parent.isin(purchase_invoices))
         .where(pi_item.pending_boe_qty > 0)
         .run(as_dict=True)
-
     )
+
 
 @frappe.whitelist()
 def fetch_pending_boe_invoices(*args, **kwargs):

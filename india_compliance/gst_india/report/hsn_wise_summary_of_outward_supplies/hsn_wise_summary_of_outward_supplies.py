@@ -115,6 +115,14 @@ def get_columns(filters):
 
 
 def get_hsn_data(filters):
+    _class = GSTR1Invoices(filters)
+    invoices = _class.get_invoices_for_item_wise_summary()
+    _class.process_invoices(invoices)
+
+    return process_hsn_data(invoices)
+
+
+def process_hsn_data(invoices):
     # TODO: This import should be moved to the top of the file once GSTR-1 Report is discontinued.
     from india_compliance.gst_india.utils.gstr_1.gstr_1_json_map import GSTR1BooksData
 
@@ -129,39 +137,16 @@ def get_hsn_data(filters):
         "total_cess_amount",
     )
 
-    _class = GSTR1Invoices(filters)
-    invoices = _class.get_invoices_for_item_wise_summary()
-    _class.process_invoices(invoices)
-
     hsn_data = GSTR1BooksData({}).prepare_hsn_data(invoices)
 
-    data = [
+    return [
         {
             **row,
-            "uom": row["uom"].split("-")[0],
+            "uom": map_uom(row["uom"], row),
             **{field: flt(row[field], 2) for field in precision_fields},
         }
         for row in hsn_data.values()
     ]
-
-    return data
-
-
-# TODO: This function will be unused and should be removed once GSTR-1 Report is discontinued.
-def get_conditions(filters):
-    conditions = ""
-
-    for opts in (
-        ("company", " and company=%(company)s"),
-        ("gst_hsn_code", " and gst_hsn_code=%(gst_hsn_code)s"),
-        ("company_gstin", " and company_gstin=%(company_gstin)s"),
-        ("from_date", " and posting_date >= %(from_date)s"),
-        ("to_date", " and posting_date <= %(to_date)s"),
-    ):
-        if filters.get(opts[0]):
-            conditions += opts[1]
-
-    return conditions
 
 
 @frappe.whitelist()
@@ -182,7 +167,7 @@ def get_json(filters, report_name, data):
 
     gst_json = {"version": "GST3.1.2", "hash": "hash", "gstin": gstin, "fp": fp}
 
-    gst_json["hsn"] = get_hsn_wise_json_data(filters, report_data)
+    gst_json["hsn"] = get_hsn_wise_json_data(report_data)
 
     return {"report_name": report_name, "data": gst_json}
 
@@ -199,14 +184,21 @@ def download_json_file():
     frappe.response["type"] = "download"
 
 
-def get_hsn_wise_json_data(filters, report_data):
-    filters = frappe._dict(filters)
+def get_hsn_wise_json_data(report_data):
     data = []
     count = 1
 
     for hsn in report_data:
         if hsn.get("hsn_code") == "Total":
             continue
+
+        if not hsn.get("hsn_code"):
+            frappe.throw(
+                _(
+                    "GST HSN Code is missing in one or more invoices. Please ensure all invoices include the HSN Code, as it is Mandatory for filing GSTR-1."
+                )
+            )
+
         row = {
             "num": count,
             "hsn_sc": hsn.get("hsn_code"),
@@ -232,3 +224,19 @@ def get_hsn_wise_json_data(filters, report_data):
         count += 1
 
     return {"data": data}
+
+
+def map_uom(uom, data=None):
+    uom = uom.upper()
+
+    if "-" in uom:
+        if (
+            data
+            and (hsn_code := data.get("hsn_code") or "")
+            and hsn_code.startswith("99")
+        ):
+            return "NA"
+
+        return uom.split("-")[0]
+
+    return uom

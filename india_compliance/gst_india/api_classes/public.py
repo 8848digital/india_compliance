@@ -12,13 +12,20 @@ class PublicAPI(BaseAPI):
         "FO8000": "no_docs_found",
     }
 
-    def setup(self):
+    def setup(self, doc=None):
         if self.sandbox_mode:
             frappe.throw(
                 _(
                     "Autofill Party Information based on GSTIN is not supported in sandbox mode"
                 )
             )
+
+        if doc:
+            self.default_log_values.update(
+                reference_doctype=doc.doctype,
+                reference_name=doc.name,
+            )
+
         self.default_headers.update({"requestid": self.generate_request_id()})
 
     def get_gstin_info(self, gstin):
@@ -52,6 +59,4 @@ class PublicAPI(BaseAPI):
 
         if error_code in self.IGNORED_ERROR_CODES:
             response_json.error_code = error_code
-
             return True
-

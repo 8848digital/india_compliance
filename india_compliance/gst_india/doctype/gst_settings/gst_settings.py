@@ -7,7 +7,11 @@ from frappe.model.document import Document
 from frappe.query_builder.functions import IfNull
 from frappe.utils import add_to_date, getdate
 
-from india_compliance.gst_india.constants import GST_ACCOUNT_FIELDS, GST_PARTY_TYPES
+from india_compliance.gst_india.constants import (
+    GST_ACCOUNT_FIELDS,
+    GST_PARTY_TYPES,
+    TAXABLE_GST_TREATMENTS,
+)
 from india_compliance.gst_india.constants.custom_fields import (
     E_INVOICE_FIELDS,
     E_WAYBILL_FIELDS,
@@ -336,7 +340,7 @@ class GSTSettings(Document):
             alert=True,
             indicator="yellow",
         )
-        
+
     def is_sek_valid(self, gstin, throw=False, threshold=30):
         for credential in self.credentials:
             if credential.service == "Returns" and credential.gstin == gstin:
@@ -399,6 +403,7 @@ class GSTSettings(Document):
 
         return True
 
+
 @frappe.whitelist()
 def disable_api_promo():
     if frappe.has_permission("GST Settings", "write"):
@@ -438,7 +443,9 @@ def update_gst_category():
         gstin = address.gstin
 
         if gstin not in gstin_info_map:
-            gstin_info_map[gstin] = get_gstin_info(gstin)
+            gstin_info_map[gstin] = get_gstin_info(
+                gstin, doc=frappe._dict(docname="Address", name=address.name)
+            )
 
         gst_category = gstin_info_map[gstin].gst_category
 
@@ -506,15 +513,15 @@ def update_pending_status(e_invoice_applicability_date, company=None):
 
     query = (
         frappe.qb.update(sales_invoice)
-        .from_(sales_invoice_item)
-        .where(sales_invoice_item.parent == sales_invoice.name)
+        .join(sales_invoice_item)
+        .on(sales_invoice_item.parent == sales_invoice.name)
         .set(sales_invoice.einvoice_status, "Pending")
         .where(
             IfNull(sales_invoice.billing_address_gstin, "")
             != IfNull(sales_invoice.company_gstin, "")
         )
         .where(IfNull(sales_invoice.irn, "") == "")
-        .where(sales_invoice_item.gst_treatment.isin(("Taxable", "Zero-Rated")))
+        .where(sales_invoice_item.gst_treatment.isin(TAXABLE_GST_TREATMENTS))
         .where(
             (IfNull(sales_invoice.place_of_supply, "") == "96-Other Countries")
             | (IfNull(sales_invoice.billing_address_gstin, "") != "")
