@@ -29,7 +29,6 @@ from india_compliance.gst_india.utils.gstin_info import get_gstr_1_return_status
 
 
 class GSTR1Beta(Document):
-
     @frappe.whitelist()
     def recompute_books(self):
         return self.generate_gstr1(recompute_books=True)
@@ -128,7 +127,7 @@ class GSTR1Beta(Document):
 
         # generate gstr1
         gstr1_log.update_status("In Progress")
-        frappe.enqueue(self._generate_gstr1, queue="short")
+        frappe.enqueue(self._generate_gstr1, queue="long")
 
         if not message:
             message = "GSTR-1 is being prepared"

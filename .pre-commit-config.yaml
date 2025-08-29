@@ -1,5 +1,5 @@
 exclude: "node_modules|.git"
-default_stages: [commit]
+default_stages: [pre-commit]
 fail_fast: false
 
 repos:
@@ -30,6 +30,14 @@ repos:
       hooks:
           - id: flake8
             additional_dependencies: [flake8-isort, flake8-bugbear]
+    
+    - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+      rev: v9.22.0
+      hooks:
+        - id: commitlint
+          name: Checking commit subject
+          stages: [commit-msg]
+          additional_dependencies: ['@commitlint/config-conventional','conventional-changelog-conventionalcommits']
 
 ci:
     autoupdate_schedule: weekly
