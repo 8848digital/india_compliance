@@ -9,7 +9,7 @@ def execute():
 
     submitted_boe_qty = (
         frappe.qb.from_(boe_item)
-        .select(boe_item.pi_detail, fn.Sum(boe_item.qty).as_("qty"))
+        .select(boe_item.pi_detail, Sum(boe_item.qty).as_("qty"))
         .where(boe_item.docstatus == 1)
         .groupby(boe_item.pi_detail)
     ).as_("submitted_boe_qty")
@@ -18,7 +18,7 @@ def execute():
         frappe.qb.update(pi_item)
         .set( 
             pi_item.pending_boe_qty,
-            pi_item.qty - fn.Coalesce(submitted_boe_qty.qty, 0),
+            pi_item.qty - IfNull(submitted_boe_qty.qty, 0),
         )
         .from_(pi)                       
         .from_(submitted_boe_qty)        
