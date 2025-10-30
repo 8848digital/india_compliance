@@ -21,7 +21,7 @@ from india_compliance.gst_india.utils.gstr_1 import (
     GovJsonKey,
 )
 from india_compliance.gst_india.utils.gstr_1 import GSTR1_DataField as df
-from india_compliance.gst_india.utils.gstr_1 import GSTR1_ItemField as _if
+from india_compliance.gst_india.utils.gstr_1 import GSTR1_ItemField as item_f
 from india_compliance.gst_india.utils.gstr_1 import (
     GSTR1_SubCategory,
     HSNKey,
@@ -295,12 +295,12 @@ class GovExcel(DataProcessor):
             },
             {
                 "label": _(GovExcelField.TAXABLE_VALUE.value),
-                "fieldname": _if.TAXABLE_VALUE,
+                "fieldname": item_f.TAXABLE_VALUE,
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
             {
                 "label": _(GovExcelField.CESS),
-                "fieldname": _if.CESS.value,
+                "fieldname": item_f.CESS.value,
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
         ]
@@ -341,12 +341,12 @@ class GovExcel(DataProcessor):
             },
             {
                 "label": _(GovExcelField.TAXABLE_VALUE.value),
-                "fieldname": _if.TAXABLE_VALUE,
+                "fieldname": item_f.TAXABLE_VALUE,
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
             {
                 "label": _(GovExcelField.CESS.value),
-                "fieldname": _if.CESS,
+                "fieldname": item_f.CESS,
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
             {
@@ -455,12 +455,12 @@ class GovExcel(DataProcessor):
             },
             {
                 "label": _(GovExcelField.TAXABLE_VALUE.value),
-                "fieldname": _if.TAXABLE_VALUE,
+                "fieldname": item_f.TAXABLE_VALUE,
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
             {
                 "label": _(GovExcelField.CESS.value),
-                "fieldname": _if.CESS,
+                "fieldname": item_f.CESS,
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
         ]
@@ -509,12 +509,12 @@ class GovExcel(DataProcessor):
             },
             {
                 "label": _(GovExcelField.TAXABLE_VALUE.value),
-                "fieldname": _if.TAXABLE_VALUE,
+                "fieldname": item_f.TAXABLE_VALUE,
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
             {
                 "label": _(GovExcelField.CESS.value),
-                "fieldname": _if.CESS,
+                "fieldname": item_f.CESS,
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
         ]
@@ -564,12 +564,12 @@ class GovExcel(DataProcessor):
             },
             {
                 "label": _(GovExcelField.TAXABLE_VALUE.value),
-                "fieldname": _if.TAXABLE_VALUE,
+                "fieldname": item_f.TAXABLE_VALUE,
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
             {
                 "label": _(GovExcelField.CESS.value),
-                "fieldname": _if.CESS,
+                "fieldname": item_f.CESS,
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
         ]
@@ -775,11 +775,11 @@ class BooksExcel(DataProcessor):
         category_wise_data = super().process_data(data)
 
         DOC_ITEM_FIELD_MAP = {
-            df.TAXABLE_VALUE: _if.TAXABLE_VALUE,
-            df.IGST: _if.IGST,
-            df.CGST: _if.CGST,
-            df.SGST: _if.SGST,
-            df.CESS: _if.CESS,
+            df.TAXABLE_VALUE: item_f.TAXABLE_VALUE,
+            df.IGST: item_f.IGST,
+            df.CGST: item_f.CGST,
+            df.SGST: item_f.SGST,
+            df.CESS: item_f.CESS,
         }
 
         for category, category_data in category_wise_data.items():
@@ -908,32 +908,32 @@ class BooksExcel(DataProcessor):
             },
             {
                 "label": _("Tax Rate"),
-                "fieldname": _if.TAX_RATE,
+                "fieldname": item_f.TAX_RATE,
                 "data_format": {"number_format": self.PERCENT_FORMAT},
                 "header_format": {"width": ExcelWidth.XS.value},
             },
             {
-                "fieldname": _if.TAXABLE_VALUE,
+                "fieldname": item_f.TAXABLE_VALUE,
                 "label": _("Taxable Value"),
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
             {
-                "fieldname": _if.IGST,
+                "fieldname": item_f.IGST,
                 "label": _("IGST"),
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
             {
-                "fieldname": _if.CGST,
+                "fieldname": item_f.CGST,
                 "label": _("CGST"),
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
             {
-                "fieldname": _if.SGST,
+                "fieldname": item_f.SGST,
                 "label": _("SGST"),
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
             {
-                "fieldname": _if.CESS,
+                "fieldname": item_f.CESS,
                 "label": _("CESS"),
                 "data_format": {"number_format": self.AMOUNT_FORMAT},
             },
