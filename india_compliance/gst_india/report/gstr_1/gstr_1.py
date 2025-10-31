@@ -2268,9 +2268,12 @@ def create_hsn_excel_sheet(excel, headers, data):
         else:
             b2c_data.append(row)
 
-    create_excel_sheet(excel, "HSN - B2B", headers, b2b_data)
-    create_excel_sheet(excel, "HSN - B2C", headers, b2c_data)
+    if b2b_data:
+        create_excel_sheet(excel, "HSN - B2B", headers, b2b_data)
 
+    if b2c_data:
+        create_excel_sheet(excel, "HSN - B2C", headers, b2c_data)
+        
 
 def create_excel_sheet(excel, sheet_name, headers, data):
     excel.create_sheet(
