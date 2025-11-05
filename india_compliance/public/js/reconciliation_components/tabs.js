@@ -16,7 +16,7 @@ reconciliation.reconciliation_tabs = class ReconciliationTabs {
         this.filtered_data = data;
 
         // clear filters
-        this.filter_group.filter_x_button.click();
+        this.apply_filters(true);
         this.render_data_tables();
     }
 
