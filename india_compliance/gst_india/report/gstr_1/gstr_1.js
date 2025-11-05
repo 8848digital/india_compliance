@@ -196,6 +196,7 @@ function show_gstr_1_beta_alert(report) {
             GSTR-1 Beta
         </a>
         is released with improved features and user experience. Try it out now!
+        ${__("is released with improved features and user experience. Try it out now!")}
         `;
 
     india_compliance.show_dismissable_alert(
