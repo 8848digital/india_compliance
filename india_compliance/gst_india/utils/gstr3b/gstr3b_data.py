@@ -6,6 +6,8 @@ from frappe.query_builder.functions import IfNull, Sum
 from india_compliance.gst_india.constants import GST_TAX_TYPES
 from india_compliance.gst_india.overrides.transaction import is_inter_state_supply
 from india_compliance.gst_india.utils import get_full_gst_uom
+from india_compliance.gst_india.utils.gstr_1 import GSTR1_SubCategory
+
 
 PURCHASE_CATEGORY_CONDITIONS = {
     "Composition Scheme, Exempted, Nil Rated": {
@@ -330,6 +332,7 @@ class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
                 self.set_invoice_category(invoice, conditions)
                 self.set_invoice_sub_category(invoice, conditions)
 
+            invoice.hsn_sub_category = GSTR1_SubCategory.HSN.value
             if invoice.invoice_category in (
                 "Composition Scheme, Exempted, Nil Rated",
                 "Non-GST",
