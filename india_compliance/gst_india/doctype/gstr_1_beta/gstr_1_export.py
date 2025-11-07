@@ -259,6 +259,7 @@ class GovExcel(DataProcessor):
                 "fieldname": inv_f.DOC_DATE,
                 "data_format": {"number_format": self.DATE_FORMAT},
                 "header_format": {"width": ExcelWidth.XS.value},
+                "transform": lambda x: x.strftime("%d-%b-%y") if x else None,
             },
             {
                 "label": _(gov_xl.INVOICE_VALUE),
@@ -320,6 +321,7 @@ class GovExcel(DataProcessor):
                 "fieldname": inv_f.DOC_DATE,
                 "data_format": {"number_format": self.DATE_FORMAT},
                 "header_format": {"width": ExcelWidth.XS.value},
+                "transform": lambda x: x.strftime("%d-%b-%y") if x else None,
             },
             {
                 "label": _(gov_xl.INVOICE_VALUE),
@@ -420,6 +422,7 @@ class GovExcel(DataProcessor):
                 "fieldname": inv_f.DOC_DATE,
                 "data_format": {"number_format": self.DATE_FORMAT},
                 "header_format": {"width": ExcelWidth.XS.value},
+                "transform": lambda x: x.strftime("%d-%b-%y") if x else None,
             },
             {
                 "label": _(gov_xl.NOTE_TYPE),
@@ -484,6 +487,7 @@ class GovExcel(DataProcessor):
                 "fieldname": inv_f.DOC_DATE,
                 "data_format": {"number_format": self.DATE_FORMAT},
                 "header_format": {"width": ExcelWidth.XS.value},
+                "transform": lambda x: x.strftime("%d-%b-%y") if x else None,
             },
             {
                 "label": _(gov_xl.NOTE_TYPE),
@@ -538,6 +542,7 @@ class GovExcel(DataProcessor):
                 "fieldname": inv_f.DOC_DATE,
                 "data_format": {"number_format": self.DATE_FORMAT},
                 "header_format": {"width": ExcelWidth.XS.value},
+                "transform": lambda x: x.strftime("%d-%b-%y") if x else None,
             },
             {
                 "label": _(gov_xl.INVOICE_VALUE),
@@ -558,6 +563,7 @@ class GovExcel(DataProcessor):
                 "fieldname": inv_f.SHIPPING_BILL_DATE,
                 "data_format": {"number_format": self.DATE_FORMAT},
                 "header_format": {"width": ExcelWidth.XS.value},
+                "transform": lambda x: x.strftime("%d-%b-%y") if x else None,
             },
             {
                 "label": _(gov_xl.TAX_RATE),
