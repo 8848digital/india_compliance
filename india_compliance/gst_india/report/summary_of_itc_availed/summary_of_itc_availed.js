@@ -1,7 +1,7 @@
 // Copyright (c) 2025, Resilient Tech and contributors
 // For license information, please see license.txt
 
-frappe.query_reports["Summary of Inward Supplies"] = {
+frappe.query_reports["Summary of ITC Availed"] = {
     filters: [
         {
             fieldname: "company",
@@ -43,7 +43,7 @@ frappe.query_reports["Summary of Inward Supplies"] = {
             ],
             reqd: 1,
             width: "80",
-        }
+        },
     ],
 
     formatter: (value, row, column, data, default_formatter) => {
@@ -56,11 +56,12 @@ frappe.query_reports["Summary of Inward Supplies"] = {
         return value;
     },
 
+    // Override datatable hook for column total calculation
     get_datatable_options(datatable_options) {
         datatable_options.hooks = {
             columnTotal: function (...args) {
                 const column_field = args[1].column.fieldname;
-                if (column_field === "details") return;
+                if (column_field === "details") return "";
 
                 const total = this.datamanager.data.reduce((acc, row) => {
                     if (row.indent === 0) {

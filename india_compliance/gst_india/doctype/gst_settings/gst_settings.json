@@ -44,6 +44,7 @@
   "restrict_cancel_if_e_invoice_final",
   "reason_for_e_invoice_cancellation",
   "e_invoice_reporting_time_limit_days",
+  "use_fallback_for_nic",
   "column_break_17",
   "fetch_e_invoice_details_from_gst_portal",
   "apply_e_invoice_only_for_selected_companies",
@@ -96,7 +97,8 @@
   "credentials_tab",
   "credentials",
   "api_secret",
-  "gstn_public_certificate"
+  "gstn_public_certificate",
+  "nic_public_key"
  ],
  "fields": [
   {
@@ -688,13 +690,27 @@
    "fieldname": "e_invoice_reporting_time_limit_days",
    "fieldtype": "Int",
    "label": "e-Invoice Reporting Time Limit (in Days)"
+  },
+  {
+   "fieldname": "nic_public_key",
+   "fieldtype": "Code",
+   "hidden": 1,
+   "label": "NIC Public Key"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval: india_compliance.is_api_enabled(doc)",
+   "description": "Check this box only if API requests are failing with invalid certificate error",
+   "fieldname": "use_fallback_for_nic",
+   "fieldtype": "Check",
+   "label": "Use Fallback APIs for e-Waybill and e-Invoice"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-04-11 15:33:51.263598",
+ "modified": "2025-11-07 17:57:29.276827",
  "modified_by": "Administrator",
  "module": "GST India",
  "name": "GST Settings",
