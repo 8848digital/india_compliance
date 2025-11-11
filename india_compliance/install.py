@@ -10,6 +10,7 @@ from india_compliance.gst_india.setup import after_install as setup_gst
 from india_compliance.gst_india.setup import (
     create_education_custom_fields,
     create_hrms_custom_fields,
+    create_healthcare_custom_fields,
 )
 from india_compliance.income_tax_india.setup import after_install as setup_income_tax
 
@@ -120,6 +121,9 @@ def after_app_install(app_name):
 
     if app_name == "education":
         create_education_custom_fields()
+    
+    if app_name == "healthcare":
+        create_healthcare_custom_fields()
 
 def update_item_tax_template_test_records():
     # Step 1: Load existing test records from the file
