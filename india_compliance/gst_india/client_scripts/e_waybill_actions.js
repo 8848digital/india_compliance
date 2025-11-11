@@ -1,5 +1,3 @@
-{% include "india_compliance/gst_india/client_scripts/e_waybill_applicability.js" %}
-
 const E_WAYBILL_CLASS = {
     "Sales Invoice": SalesInvoiceEwaybill,
     "Purchase Invoice": PurchaseInvoiceEwaybill,
@@ -931,7 +929,7 @@ function show_update_transporter_dialog(frm) {
                 reqd: 1,
                 default:
                     frm.doc.gst_transporter_id &&
-                        frm.doc.gst_transporter_id.length === 15
+                    frm.doc.gst_transporter_id.length === 15
                         ? frm.doc.gst_transporter_id
                         : "",
                 onchange: () => validate_gst_transporter_id(d, frm.doc),
@@ -1290,7 +1288,8 @@ async function update_gst_tranporter_id(dialog) {
 
 function validate_gst_transporter_id(dialog, doc) {
     india_compliance.validate_gst_transporter_id(
-        dialog.get_value("gst_transporter_id"), doc
+        dialog.get_value("gst_transporter_id"),
+        doc
     );
 }
 
@@ -1415,11 +1414,11 @@ function show_sandbox_mode_indicator() {
             `
             <div class="sidebar-menu ic-sandbox-mode">
                 <p><label class="indicator-pill no-indicator-dot yellow" title="${__(
-                "Your site has enabled Sandbox Mode in GST Settings."
-            )}">${__("Sandbox Mode")}</label></p>
+                    "Your site has enabled Sandbox Mode in GST Settings."
+                )}">${__("Sandbox Mode")}</label></p>
                 <p><a class="small text-muted" href="/app/gst-settings" target="_blank">${__(
-                "Sandbox Mode is enabled for GST APIs."
-            )}</a></p>
+                    "Sandbox Mode is enabled for GST APIs."
+                )}</a></p>
             </div>
             `
         );
