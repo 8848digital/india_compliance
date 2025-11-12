@@ -1777,6 +1777,9 @@ def validate_transaction(doc, method=None):
     if ignore_gst_validations(doc):
         return False
 
+    set_gst_tax_type(doc)
+    validate_items(doc)
+
     if doc.place_of_supply:
         validate_place_of_supply(doc)
     else:
