@@ -54,7 +54,7 @@ from india_compliance.utils.change_log_utils import create_change_log_comment
 
 
 @frappe.whitelist()
-def generate_e_waybill_json(doctype: str, docnames, values=None):
+def generate_e_waybill(*, doctype, docname, values=None, force: bool = False):
     docnames = frappe.parse_json(docnames) if docnames.startswith("[") else [docnames]
     ewb_data = {
         "version": "1.0.0621",
@@ -501,7 +501,7 @@ def update_transporter(*, doctype, docname, values):
     return send_updated_doc(doc)
 
 @frappe.whitelist()
-def extend_validity(*, doctype, docname, values, scheduled=False):
+def extend_validity(*, doctype, docname, values, scheduled: bool = False):
     doc = load_doc(doctype, docname, "submit")
     values = frappe.parse_json(values)
 
@@ -653,7 +653,7 @@ def generate_pending_e_waybills():
 
 
 @frappe.whitelist()
-def fetch_e_waybill_data(*, doctype, docname, attach=False):
+def fetch_e_waybill_data(*, doctype, docname, attach: bool = False):
     doc = load_doc(doctype, docname, "write" if attach else "print")
     log = frappe.get_doc("e-Waybill Log", doc.ewaybill)
     if not log.is_latest_data:
