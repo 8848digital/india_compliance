@@ -143,6 +143,9 @@ def generate_e_invoice(docname, throw=True, force=False):
         api = EInvoiceAPI.create(doc)
         result = api.generate_irn(data)
 
+        if not result.Irn:
+            frappe.throw(_("e-Invoice generation failed"))
+
         # Handle Duplicate IRN
         if result.InfCd == "DUPIRN":
             current_gstin = data.get("BuyerDtls").get("Gstin")
@@ -251,6 +254,9 @@ def handle_duplicate_irn_error(
 
     if response.error_code:
         response = irn_data
+    
+    if not response.Irn:
+        frappe.throw(_("e-Invoice generation failed"))
 
     return log_and_process_e_invoice_generation(doc, response, api.sandbox_mode)
 
