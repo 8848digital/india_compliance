@@ -75,7 +75,7 @@ def _update_item_modified_timestamp(item_names, timestamp=None):
         frappe.qb.update(item)
         .set(item.modified, timestamp or frappe.utils.now())
         .set(item.modified_by, frappe.session.user)
-        .where(frappe.qb.DocType("Item").name.isin(item_names))
+        .where(item.name.isin(item_names))
     ).run()
 
 def _add_comment_to_items(item_names, hsn_code, timestamp=None):
