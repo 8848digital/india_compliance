@@ -1321,11 +1321,8 @@ class EWaybillData(GSTTransactionData):
 
         self.validate_non_gst_items()
 
-        if is_outward_stock_entry(self.doc):
-            self.validate_different_gstin()
-        else:
-            if not is_outward_stock_entry(self.doc):
-                self.validate_same_gstin()
+        if not is_outward_stock_entry(self.doc):
+            self.validate_same_gstin()
 
     def validate_same_gstin(self):
         if self.doc.doctype == "Delivery Note":
