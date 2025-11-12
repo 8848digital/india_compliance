@@ -97,9 +97,13 @@ def _bulk_insert_item_taxes(item_names, taxes):
         frappe.db.bulk_insert("Item Tax", fields, values)
 
 def _update_item_modified_timestamp(item_names):
-    frappe.qb.update(frappe.qb.DocType("Item")).set("modified", frappe.utils.now()).set(
-        "modified_by", frappe.session.user
-    ).where(frappe.qb.DocType("Item").name.isin(item_names)).run()
+    item = frappe.qb.DocType("Item")
+    (
+        frappe.qb.update(item)
+        .set(item.modified, frappe.utils.now())
+        .set(item.modified_by, frappe.session.user)
+        .where(frappe.qb.DocType("Item").name.isin(item_names))
+    ).run()
 
 def validate_hsn_code(hsn_code):
     validate_hsn_code, valid_hsn_length = get_hsn_settings()
