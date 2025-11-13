@@ -1047,7 +1047,11 @@ class GSTR3BExcelExporter:
             itc_type = itc_entry.get("ty", "")
             if itc_type in self.ITC_AVAILABLE_TYPES:
                 row_key = self.ITC_AVAILABLE_TYPES[itc_type]
-                self._set_itc_values(row_key, itc_entry)
+                # Import of goods and services - columns D and E are read-only
+                if itc_type in ["IMPG", "IMPS"]:
+                    self._set_import_itc_values(row_key, itc_entry)
+                else:
+                    self._set_itc_values(row_key, itc_entry)
 
     def _set_itc_reversed_sections(self, itc_rev):
         """Set ITC Reversed sections using type-based mapping"""
@@ -1057,6 +1061,14 @@ class GSTR3BExcelExporter:
             if itc_type in self.ITC_REVERSED_TYPES:
                 row_key = self.ITC_REVERSED_TYPES[itc_type]
                 self._set_itc_values(row_key, itc_entry)
+
+    def _set_import_itc_values(self, row_key, data):
+        """Set ITC values for import rows (excludes columns D and E - camt)"""
+        row = self.ROWS[row_key]
+        for key in ["iamt", "csamt"]:  # Exclude camt (column D)
+            if key in self.ITC_COLUMNS:
+                value = flt(data.get(key, 0), 2)
+                self._set_value(row, self.ITC_COLUMNS[key], value)
 
     def _set_section_5(self):
         """Set Section 5 - Inward supplies"""
