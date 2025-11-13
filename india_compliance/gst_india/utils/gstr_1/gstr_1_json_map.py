@@ -955,6 +955,16 @@ class CDNR(GSTR1DataMapper):
 
     def format_doc_value(self, value, data):
         return value * -1 if data[gov_f.NOTE_TYPE] == "C" else value
+    
+    def ignore_pos_if_export(self, _, *args):
+        if (
+            args
+            and isinstance(args[0], dict)
+            and args[0].get(inv_f.DOC_TYPE) in ("EXPWP", "EXPWOP")
+        ):
+            return True
+
+        return False
 
 
 class CDNUR(GSTR1DataMapper):
@@ -1042,6 +1052,10 @@ class CDNUR(GSTR1DataMapper):
             inv_f.POS: self.map_place_of_supply,
             inv_f.DOC_VALUE: lambda x, *args: abs(x),  # nosemgrep
             inv_f.DOC_DATE: self.format_date_for_gov,
+        }
+
+        self.ignore_key_for_gov = {
+            inv_f.POS: self.ignore_pos_if_export,
         }
 
     def convert_to_internal_data_format(self, input_data):
