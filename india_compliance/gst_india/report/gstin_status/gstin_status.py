@@ -4,7 +4,7 @@
 import frappe
 from frappe import _
 from frappe.query_builder import Case, Order
-from frappe.query_builder.functions import IfNull, IsNull, LiteralValue
+from frappe.query_builder.functions import IfNull, LiteralValue
 from pypika.terms import ValueWrapper
 
 
@@ -125,11 +125,7 @@ class GSTINDetailedReport:
             gstin.registration_date,
             gstin.last_updated_on,
             gstin.cancelled_date,
-            Case()
-           .when(gstin.is_blocked.isnull(), ValueWrapper(""))
-            .when(gstin.is_blocked == 0, "No")
-            .else_("Yes")
-            .as_("is_blocked"),
+            Case().when(gstin.is_blocked == 0, "No").else_("Yes").as_("is_blocked"),
             party_query.party_type,
             party_query.party,
         ]

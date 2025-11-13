@@ -11,6 +11,7 @@ from india_compliance.gst_india.constants import TAX_TYPES
 
 from india_compliance.gst_india.overrides.transaction import (
     get_gst_details,
+    set_gst_tax_type,
 )
 from india_compliance.gst_india.overrides.transaction import (
     validate_backdated_transaction as _validate_backdated_transaction,
@@ -22,7 +23,7 @@ from india_compliance.gst_india.utils import get_all_gst_accounts
 
 
 @frappe.whitelist()
-def get_outstanding_reference_documents(args, validate=False):
+def get_outstanding_reference_documents(args, validate: bool = False):
     from erpnext.accounts.doctype.payment_entry.payment_entry import (
         get_outstanding_reference_documents,
     )
@@ -91,6 +92,7 @@ def validate(doc, method=None):
         validate_transaction_for_advance_payment(doc, method)
 
     else:
+        set_gst_tax_type(doc)
         for row in doc.taxes:
             if row.gst_tax_type in TAX_TYPES and row.tax_amount != 0:
                 frappe.throw(
@@ -445,6 +447,10 @@ def get_taxes_summary(company, payment_entries):
         .where(gl_entry.voucher_no.isin(references))
         .where(gl_entry.account.isin(gst_accounts))
         .where(gl_entry.company == company)
+        # This is temporary fix.
+        # It will still cause issues where
+        # other taxes are charged like TDS and GST Account are specified in deduction table.
+        .where(pe.total_taxes_and_charges != 0)
         .groupby(gl_entry.voucher_no, pe.name)
         .run(as_dict=True)
     )

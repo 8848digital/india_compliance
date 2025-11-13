@@ -962,7 +962,9 @@ def get_party_details_for_subcontracting(party_details, doctype, company):
 
 
 @frappe.whitelist()
-def get_gst_details(party_details, doctype, company, *, update_place_of_supply=False):
+def get_gst_details(
+    party_details, doctype, company, *, update_place_of_supply: bool = False
+    ):
     """
     This function does not check for permissions since it returns insensitive data
     based on already sensitive input (party details)
@@ -972,8 +974,15 @@ def get_gst_details(party_details, doctype, company, *, update_place_of_supply=F
      - tax template
      - taxes in the tax template
     """
-    is_sales_transaction = doctype in SALES_DOCTYPES or doctype == "Payment Entry"
     party_details = frappe.parse_json(party_details)
+
+    if not (
+        party_details.company_gstin
+        or is_indian_registered_company(frappe._dict(company=company))
+    ):
+        return {}
+    
+    is_sales_transaction = doctype in SALES_DOCTYPES or doctype == "Payment Entry"
     gst_details = frappe._dict()
 
     allow_same_gstin = False
@@ -1767,6 +1776,8 @@ def before_validate_transaction(doc, method=None):
 def validate_transaction(doc, method=None):
     if ignore_gst_validations(doc):
         return False
+
+    set_gst_tax_type(doc)
 
     if doc.place_of_supply:
         validate_place_of_supply(doc)
