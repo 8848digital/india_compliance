@@ -955,6 +955,16 @@ class CDNR(GSTR1DataMapper):
 
     def format_doc_value(self, value, data):
         return value * -1 if data[gov_f.NOTE_TYPE] == "C" else value
+    
+    def ignore_pos_if_export(self, _, *args):
+        if (
+            args
+            and isinstance(args[0], dict)
+            and args[0].get(inv_f.DOC_TYPE) in ("EXPWP", "EXPWOP")
+        ):
+            return True
+
+        return False
 
 
 class CDNUR(GSTR1DataMapper):
@@ -1042,6 +1052,10 @@ class CDNUR(GSTR1DataMapper):
             inv_f.POS: self.map_place_of_supply,
             inv_f.DOC_VALUE: lambda x, *args: abs(x),  # nosemgrep
             inv_f.DOC_DATE: self.format_date_for_gov,
+        }
+
+        self.ignore_key_for_gov = {
+            inv_f.POS: self.ignore_pos_if_export,
         }
 
     def convert_to_internal_data_format(self, input_data):
@@ -1250,6 +1264,11 @@ class HSNSUM(GSTR1DataMapper):
             )
         )
 
+        if (message := data.get(inv_f.ERROR_MSG, "").strip()) and (
+            hsn_code := data.get(inv_f.HSN_CODE)
+        ):
+            data[inv_f.ERROR_MSG] = f"HSN Code: {hsn_code} - {message}"
+
         return data
 
     def map_uom(self, uom, data=None):
@@ -1269,7 +1288,6 @@ class HSNSUM(GSTR1DataMapper):
             return f"{uom}-{UOM_MAP[uom]}"
 
         return f"OTH-{UOM_MAP.get('OTH')}"
-
 
 class AT(GSTR1DataMapper):
     """
@@ -1844,6 +1862,8 @@ def convert_to_internal_data_format(gov_data, for_errors=False):
     errors = []
     for category, data in output.items():
         for row in data.values():
+            if not (row.get(inv_f.ERROR_CD) or row.get(inv_f.ERROR_MSG)):
+                continue
             row["category"] = category
             errors.append(row)
 
@@ -2565,14 +2585,21 @@ class GSTR1BooksData(BooksDataMapper):
             self.process_excluded_docs_for_quarterly(data, m1_m2_subcategories)
 
     def process_included_docs_for_quarterly(self, data, m1_m2_subcategories):
+        if not data or not isinstance(data, dict):
+            return
+        
         included_docs = self.get_already_filed_docs(m1_m2_subcategories)
 
-        for category in data:
-            if category not in m1_m2_subcategories:
-                continue
+        categories_to_process = [
+            cat for cat in data.keys() if cat in m1_m2_subcategories
+        ]
 
-            included = data.setdefault("already_included_docs_for_quarterly", [])
+        if not categories_to_process:
+            return
 
+        included = data.setdefault("already_included_docs_for_quarterly", [])
+
+        for category in categories_to_process:
             for key, row in data[category].copy().items():
                 if key in included_docs:
                     continue
@@ -2582,6 +2609,9 @@ class GSTR1BooksData(BooksDataMapper):
                 del data[category][key]
 
     def process_excluded_docs_for_quarterly(self, data, m1_m2_subcategories):
+        if not data or not isinstance(data, dict):
+            return
+        
         for category in data.copy():
             if category in m1_m2_subcategories:
                 continue
@@ -2635,9 +2665,16 @@ class GSTR1BooksData(BooksDataMapper):
             )
 
             if not gstr1_log.filed:
-                gstr1_log.generate_gstr1_data(self.filters)
+                # Extract month number from log_name (format: GSTR1-MMYYYY-GSTIN)
+                month_num = int(log_name.split("-")[1][:2])
+                new_filters = frappe._dict(self.filters)
+                new_filters.month_or_quarter = MONTHS[month_num - 1]
+                gstr1_log.generate_gstr1_data(new_filters)
 
             filed_data = gstr1_log.get_json_for("filed")
+
+            if not filed_data:
+                continue
 
             for category, invoices in filed_data.items():
                 if category not in m1_m2_subcategories:
