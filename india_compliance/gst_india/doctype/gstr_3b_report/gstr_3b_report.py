@@ -350,34 +350,27 @@ class GSTR3BReport(Document):
             self.report_dict["itc_elg"]["itc_inelg"][0][tax_amount_key] += entry.amount
 
     def get_inward_nil_exempt(self, state):
-        PurchaseInvoice =  frappe.qb.DocType("Purchase Invoice")
-        PurchaseInvoiceItem =  frappe.qb.DocType("Purchase Invoice Item")
-
-        query = (
-            frappe.qb.from_(PurchaseInvoice)
-            .join(PurchaseInvoiceItem)
-            .on(PurchaseInvoice.name == PurchaseInvoiceItem.parent)
-            .select(
-                PurchaseInvoice.place_of_supply,
-                PurchaseInvoice.supplier_address,
-                PurchaseInvoiceItem.taxable_value,
-                PurchaseInvoiceItem.gst_treatment,
-            )
-            .where(
-                (PurchaseInvoice.docstatus == 1)
-                & (PurchaseInvoice.is_opening == "No")
-                & (PurchaseInvoice.company_gstin != IfNull(PurchaseInvoice.supplier_gstin, ""))
-                & (
-                    (PurchaseInvoiceItem.gst_treatment != "Taxable")
-                    | (PurchaseInvoice.gst_category == "Registered Composition")
-                )
-                & (PurchaseInvoice.posting_date.between(self.from_date, self.to_date))
-                & (PurchaseInvoice.company == self.company)
-                & (PurchaseInvoice.company_gstin == self.gst_details.get("gstin"))
-            )
+        inward_nil_exempt = frappe.db.sql(
+            """
+            SELECT p.place_of_supply, p.supplier_address,
+            i.taxable_value, i.gst_treatment
+            FROM `tabPurchase Invoice` p , `tabPurchase Invoice Item` i
+            WHERE p.docstatus = 1 and p.name = i.parent
+            and p.is_opening = 'No'
+            and p.company_gstin != IFNULL(p.supplier_gstin, "")
+            and (i.gst_treatment != 'Taxable' or p.gst_category = 'Registered Composition') and
+            p.posting_date between %s and %s
+            and p.company = %s and p.company_gstin = %s
+            and p.gst_category != "Overseas"
+            """,
+            (
+                self.from_date,
+                self.to_date,
+                self.company,
+                self.gst_details.get("gstin"),
+            ),
+            as_dict=1,
         )
-
-        inward_nil_exempt = query.run(as_dict=True)
 
         inward_nil_exempt_details = {
             "gst": {"intra": 0.0, "inter": 0.0},
@@ -391,7 +384,9 @@ class GSTR3BReport(Document):
                 d.place_of_supply = "00-" + cstr(state)
 
             supplier_state = address_state_map.get(d.supplier_address) or state
-            is_intra_state = cstr(supplier_state) == cstr(d.place_of_supply.split("-")[1])
+            is_intra_state = cstr(supplier_state) == cstr(
+                d.place_of_supply.split("-")[1]
+            )
             amount = flt(d.taxable_value, 2)
 
             if d.gst_treatment != "Non-GST":
