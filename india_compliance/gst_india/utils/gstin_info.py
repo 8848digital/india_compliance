@@ -11,8 +11,8 @@ from frappe.utils import add_to_date, cint
 
 from india_compliance.exceptions import GSPServerError
 from india_compliance.gst_india.api_classes.base import BASE_URL
-from india_compliance.gst_india.api_classes.e_invoice import EInvoiceAPI
-from india_compliance.gst_india.api_classes.e_waybill import EWaybillAPI
+from india_compliance.gst_india.api_classes.nic.e_invoice import EInvoiceAPI
+from india_compliance.gst_india.api_classes.nic.e_waybill import EWaybillAPI
 from india_compliance.gst_india.api_classes.public import PublicAPI
 from india_compliance.gst_india.api_classes.taxpayer_base import (
     otp_handler,
@@ -40,7 +40,7 @@ CHARACTERS_TO_STRIP = f"{whitespace},"
 
 
 @frappe.whitelist()
-def get_gstin_info(gstin, *, doc=None, throw_error=True):
+def get_gstin_info(gstin, *, doc=None, throw_error: bool = True):
     if doc and isinstance(doc, str):
         doc = frappe.parse_json(doc)
 
@@ -213,7 +213,7 @@ def fetch_gstin_status(*, gstin=None, doc=None, throw=True):
 
         doc = doc or frappe._dict()
         doc.company_gstin = company_gstin
-        response = EInvoiceAPI(doc=doc).get_gstin_info(gstin)
+        response = EInvoiceAPI.create(doc=doc).get_gstin_info(gstin)
         return frappe._dict(
             {
                 "gstin": gstin,

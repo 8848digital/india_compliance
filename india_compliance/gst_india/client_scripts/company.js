@@ -1,5 +1,3 @@
-{% include "india_compliance/gst_india/client_scripts/party.js" %}
-
 const DOCTYPE = "Company";
 
 validate_pan(DOCTYPE);
@@ -23,6 +21,10 @@ frappe.ui.form.on(DOCTYPE, {
         erpnext.company.set_custom_query(frm, [
             "default_customs_payable_account",
             { root_type: "Liability" },
+        ]);
+        erpnext.company.set_custom_query(frm, [
+            "default_gst_expense_account",
+            {},
         ]);
 
         frm.set_query("print_label", "bank_details_for_printing", (_, cdt, cdn) => {

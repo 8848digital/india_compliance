@@ -62,7 +62,11 @@ class GSTR1Beta(Document):
     @frappe.whitelist()
     @otp_handler
     def generate_gstr1(
-        self, sync_for=None, recompute_books=False, only_books_data=None, message=None
+        self,
+        sync_for=None,
+        recompute_books: bool = False,
+        only_books_data=None,
+        message=None,
     ):
         period = get_period(self.month_or_quarter, self.year)
         log_name = f"GSTR1-{period}-{self.company_gstin}"
@@ -234,7 +238,7 @@ def check_action_status(month_or_quarter, year, company_gstin, action):
 
 
 @frappe.whitelist()
-def mark_as_unfiled(filters, force):
+def mark_as_unfiled(filters, force: bool):
     frappe.has_permission("GST Return Log", "write", throw=True)
 
     filters = frappe._dict(json.loads(filters))
@@ -301,6 +305,58 @@ def get_journal_entries(month_or_quarter, year, company, filing_preference):
         return
 
     return {"data": data, "posting_date": to_date}
+
+@frappe.whitelist()
+def get_gst_and_round_off_accounts(month_or_quarter, year, company, filing_preference):
+    """
+    Get GST output accounts and round off account for journal entry creation.
+
+    Returns:
+        dict: Contains account details and posting date, or None if accounts not found
+    """
+    if not frappe.has_permission("Journal Entry", "create"):
+        return
+
+    _, to_date = get_gstr_1_from_and_to_date(month_or_quarter, year, filing_preference)
+
+    # Get Output GST accounts using existing utility
+    try:
+        gst_accounts = get_gst_accounts_by_type(company, "Output")
+
+    except Exception:
+        return
+
+    if not gst_accounts:
+        return
+
+    # For Round Off Account
+    round_off_account = frappe.get_all(
+        "Account",
+        filters={
+            "company": company,
+            "account_type": "Round Off",
+        },
+        pluck="name",
+    )
+
+    if not round_off_account:
+        return
+
+    round_off_account = round_off_account[0]
+
+    account = {
+        "igst_account": gst_accounts.get("igst_account"),
+        "cgst_account": gst_accounts.get("cgst_account"),
+        "sgst_account": gst_accounts.get("sgst_account"),
+        "cess_account": gst_accounts.get("cess_account"),
+        "cess_non_advol_account": gst_accounts.get("cess_non_advol_account"),
+        "round_off_account": round_off_account,
+    }
+
+    return {
+        "account": account,
+        "posting_date": to_date,
+    }
 
 
 @frappe.whitelist()

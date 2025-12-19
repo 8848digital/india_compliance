@@ -92,19 +92,24 @@ def send_updated_doc(doc, set_docinfo=False):
 
 
 @frappe.whitelist()
-def get_gstin_list(party, party_type="Company"):
+def get_gstin_list(party: str, party_type: str = "Company", exclude_isd: bool = False):
     """
     Returns a list the party's GSTINs.
     """
     frappe.has_permission(party_type, doc=party, throw=True)
 
+    filters = {
+        "link_doctype": party_type,
+        "link_name": party,
+        "gstin": ("is", "set"),
+    }
+
+    if exclude_isd:
+        filters.update({"gst_category": ["!=", "Input Service Distributor"]})
+
     gstin_list = frappe.get_all(
         "Address",
-        filters={
-            "link_doctype": party_type,
-            "link_name": party,
-            "gstin": ("is", "set"),
-        },
+        filters=filters,
         pluck="gstin",
         distinct=True,
     )
@@ -1064,7 +1069,7 @@ def create_notification(
             "email_content": message_content.get("body"),
         }
     )
-    notification.insert()
+    notification.insert(ignore_permissions=True)
 
 
 def enable_autocommit(fn):
@@ -1080,3 +1085,39 @@ def enable_autocommit(fn):
             db.auto_commit_on_many_writes = autocommit
 
     return wrapper
+
+def get_company_gstin_number(company, address=None, all_gstins=False):
+    gstin = ""
+    if address:
+        gstin = frappe.db.get_value("Address", address, "gstin")
+
+    if not gstin:
+        gstin = get_gstin_list(company)
+        if gstin and not all_gstins:
+            gstin = gstin[0]
+
+    if not gstin:
+        address = frappe.bold(address) if address else ""
+        frappe.throw(
+            _("Please set valid GSTIN No. in Company Address {} for company {}").format(
+                address, frappe.bold(company)
+            )
+        )
+
+    return gstin
+
+
+def has_permission_of_page(page_name, throw=False):
+    """
+    Check if the user has permission to access the page.
+    """
+    page = frappe.get_doc("Page", page_name)
+    if not page.is_permitted():
+        if not throw:
+            return False
+
+        raise frappe.PermissionError(
+           _("You do not have permission to access page: {0}").format(page_name)
+        )
+
+    return True

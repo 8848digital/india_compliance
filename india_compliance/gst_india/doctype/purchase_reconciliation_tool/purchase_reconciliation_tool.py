@@ -9,6 +9,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import IfNull
 from frappe.utils import add_to_date, cint, now_datetime
+from frappe.utils.background_jobs import is_job_enqueued
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
     get_accounting_dimensions,
 )
@@ -128,10 +129,19 @@ class PurchaseReconciliationTool(Document):
         date_range,
         return_type=None,
         return_period=None,
-        force=False,
+        force: bool = False,
         gst_categories=None,
     ):
         frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
+
+        job_id = f"purchase_reconciliation_tool:{company_gstin}:{return_type}"
+
+        if is_job_enqueued(job_id):
+            return {
+                "message": _(
+                    "A download job is already in progress for the GSTIN - {0} and Return Type - {1}"
+                ).format(company_gstin, return_type),
+            }
 
         TaxpayerBaseAPI(company_gstin).validate_auth_token()
 
@@ -144,13 +154,15 @@ class PurchaseReconciliationTool(Document):
             force=force,
             gst_categories=gst_categories,
             queue="long",
+            job_id=job_id,
             now=frappe.flags.in_test,
             timeout=1800,
+            deduplicate=True,
         )
 
     @frappe.whitelist()
     def get_import_history(
-        self, company_gstin, return_type, date_range, for_download=True
+        self, company_gstin, return_type, date_range, for_download: bool = True
     ):
         frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
 
@@ -521,7 +533,7 @@ def generate_excel_attachment(data, doc):
 
 
 @frappe.whitelist()
-def download_excel_report(data, doc, is_supplier_specific=False):
+def download_excel_report(data, doc, is_supplier_specific: bool = False):
     frappe.has_permission("Purchase Reconciliation Tool", "export", throw=True)
 
     build_data = BuildExcel(doc, data, is_supplier_specific)
@@ -655,7 +667,7 @@ class AutoReconcile:
         if not is_api_enabled(self.gst_settings):
             return False
 
-        if self.settings.sandbox_mode:
+        if self.gst_settings.sandbox_mode:
             return False
 
         return self.gst_settings.enable_auto_reconciliation and self.gst_settings.get(

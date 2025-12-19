@@ -70,7 +70,7 @@ Object.assign(india_compliance, {
         return `${month}${year}`;
     },
 
-    get_gstin_query(party, party_type = "Company") {
+    get_gstin_query(party, party_type = "Company", exclude_isd = false) {
         if (!party) {
             frappe.show_alert({
                 message: __("Please select {0} to get GSTIN options", [__(party_type)]),
@@ -81,7 +81,7 @@ Object.assign(india_compliance, {
 
         return {
             query: "india_compliance.gst_india.utils.get_gstin_list",
-            params: { party, party_type },
+            params: { party, party_type, exclude_isd },
         };
     },
 
@@ -110,7 +110,7 @@ Object.assign(india_compliance, {
         return in_list(frappe.boot.sales_doctypes, doctype) ? "Customer" : "Supplier";
     },
 
-    async set_gstin_status(field, doc, force_update) {
+    async set_gstin_status(field, doc, force_update = false) {
         const gstin = field.value;
         if (!gstin || gstin.length !== 15) return field.set_description("");
 
@@ -135,7 +135,7 @@ Object.assign(india_compliance, {
         return message;
     },
 
-    async set_pan_status(field, force_update = null) {
+    async set_pan_status(field, force_update = false) {
         const pan = field.value;
         field.set_description("");
         if (!pan || pan.length !== 10) return;
@@ -268,8 +268,15 @@ Object.assign(india_compliance, {
     },
 
     validate_gstin(gstin, show_msg = true) {
+        const opts = { title: __("Error"), indicator: "red" };
+
         if (!gstin || gstin.length !== 15) {
-            if (show_msg) frappe.msgprint(__("GSTIN must be 15 characters long"));
+            if (show_msg) {
+                frappe.msgprint({
+                    message: __("GSTIN must be 15 characters long"),
+                    ...opts,
+                });
+            }
             return;
         }
 
@@ -277,11 +284,13 @@ Object.assign(india_compliance, {
 
         if (GSTIN_REGEX.test(gstin) && is_gstin_check_digit_valid(gstin)) {
             return gstin;
-        } else {
-            if (show_msg) frappe.msgprint(__("Invalid GSTIN"));
+        } else if (show_msg) {
+            frappe.msgprint({
+                message: __("Invalid GSTIN"),
+                ...opts,
+            });
         }
     },
-
     guess_gst_category(gstin, country) {
         if (!gstin) {
             if (country && country !== "India") return "Overseas";
@@ -506,6 +515,12 @@ Object.assign(india_compliance, {
         }
 
         return true;
+    },
+
+    is_indian_registered_company(company) {
+        if (!company) return false;
+
+        return frappe.boot.indian_registered_companies?.includes(company);
     },
 });
 

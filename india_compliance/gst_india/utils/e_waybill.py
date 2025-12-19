@@ -3,7 +3,7 @@ import os
 
 import frappe
 from frappe import _
-from frappe.desk.form.load import get_docinfo
+from frappe.desk.form.load import get_docinfo, run_onload
 from frappe.utils import (
     add_days,
     add_to_date,
@@ -17,10 +17,11 @@ from frappe.utils import (
 from frappe.utils.file_manager import save_file
 
 from india_compliance.exceptions import GSPServerError
-from india_compliance.gst_india.api_classes.e_invoice import EInvoiceAPI
-from india_compliance.gst_india.api_classes.e_waybill import EWaybillAPI
+from india_compliance.gst_india.api_classes.nic.e_invoice import EInvoiceAPI
+from india_compliance.gst_india.api_classes.nic.e_waybill import EWaybillAPI
 from india_compliance.gst_india.constants import (
     GST_TAX_TYPES,
+    GSTIN_FORMAT,
     SALES_DOCTYPES,
     STATE_NUMBERS,
     TAXABLE_GST_TREATMENTS,
@@ -38,6 +39,7 @@ from india_compliance.gst_india.constants.e_waybill import (
 )
 from india_compliance.gst_india.utils import (
     handle_server_errors,
+    is_api_enabled,
     is_foreign_doc,
     is_outward_stock_entry,
     load_doc,
@@ -46,6 +48,7 @@ from india_compliance.gst_india.utils import (
     update_onload,
 )
 from india_compliance.gst_india.utils.transaction_data import GSTTransactionData
+from india_compliance.utils.change_log_utils import create_change_log_comment
 
 #######################################################################################
 ### Manual JSON Generation for e-Waybill ##############################################
@@ -53,7 +56,7 @@ from india_compliance.gst_india.utils.transaction_data import GSTTransactionData
 
 
 @frappe.whitelist()
-def generate_e_waybill_json(doctype: str, docnames, values=None):
+def generate_e_waybill(*, doctype, docname, values=None, force: bool = False):
     docnames = frappe.parse_json(docnames) if docnames.startswith("[") else [docnames]
     ewb_data = {
         "version": "1.0.0621",
@@ -92,10 +95,7 @@ def enqueue_bulk_e_waybill_generation(doctype, docnames):
     """
     Enqueue bulk generation of e-Waybill for the given documents.
     """
-
     frappe.has_permission(doctype, "submit", throw=True)
-
-    from india_compliance.gst_india.utils import is_api_enabled
 
     gst_settings = frappe.get_cached_doc("GST Settings")
     if not is_api_enabled(gst_settings) or not gst_settings.enable_e_waybill:
@@ -157,24 +157,53 @@ def _generate_e_waybill(doc, throw=True, force=False):
             raise GSPServerError
 
         # Via e-Invoice API if not Return or Debit Note
+        # Via e-Waybill API if has Non-Taxable items
         # Handles following error when generating e-Waybill using IRN:
         # 4010: E-way Bill cannot generated for Debit Note, Credit Note and Services
-        with_irn = doc.get("irn") and not (
-            doc.is_return or doc.get("is_debit_note") or is_foreign_doc(doc)
+        with_irn = (
+            doc.get("irn")
+            and all(item.gst_treatment in TAXABLE_GST_TREATMENTS for item in doc.items)
+            and not (doc.is_return or doc.get("is_debit_note") or is_foreign_doc(doc))
         )
 
         data = EWaybillData(doc).get_data(with_irn=with_irn)
 
         api = EWaybillAPI if not with_irn else EInvoiceAPI
-        result = api(doc).generate_e_waybill(data)
+        api = api.create(doc)
+
+        result = api.generate_e_waybill(data)
+        
+        if result.error_code in ("3028", "3029"):
+            # if the code reaches here, than api will always be EInvoiceAPI instance
+            match = GSTIN_FORMAT.search(result.error_message)
+
+            if not match:
+                frappe.throw(
+                    _("Could not identify GSTIN from error: {0}").format(
+                        result.error_message or _("Unknown error")
+                    )
+                )
+
+            gstin = match.group()
+
+            response = api.sync_gstin_info(gstin)
+
+            if response.Status != "ACT":
+                frappe.throw(
+                    result.error_message, title=_("Error Generating e-Waybill")
+                )
+            result = api.generate_e_waybill(data)
 
         if result.error_code == "4002":
-            result = api(doc).get_e_waybill_by_irn(doc.get("irn"))
+            result = api.get_e_waybill_by_irn(doc.get("irn"))
 
         if result.error_code == "2148":
             with_irn = False
             data = EWaybillData(doc).get_data(with_irn=with_irn)
-            result = EWaybillAPI(doc).generate_e_waybill(data)
+            result = EWaybillAPI.create(doc).generate_e_waybill(data)
+        
+        if not result.get("ewayBillNo" if not with_irn else "EwbNo"):
+            frappe.throw(_("e-Waybill generation failed"))
 
     except GSPServerError as e:
         handle_server_errors(settings, doc, "e-Waybill", e)
@@ -197,7 +226,7 @@ def _generate_e_waybill(doc, throw=True, force=False):
 
     if result.error_code == "604":
         error_message = (
-            result.message
+            result.error_message
             + """<br/><br/> Try to fetch active e-waybills by Date if already generated."""
         )
         frappe.throw(error_message, title=_("API Request Failed"))
@@ -284,7 +313,8 @@ def _cancel_e_waybill(doc, values):
         else EWaybillAPI
     )
 
-    result = api(doc).cancel_e_waybill(e_waybill_data.get_data_for_cancellation(values))
+    cancellation_data = e_waybill_data.get_data_for_cancellation(values)
+    result = api.create(doc).cancel_e_waybill(cancellation_data)
 
     log_and_process_e_waybill_cancellation(doc, values, result)
 
@@ -322,7 +352,19 @@ def log_and_process_e_waybill_cancellation(doc, values, result):
 @frappe.whitelist()
 def update_vehicle_info(*, doctype, docname, values):
     doc = load_doc(doctype, docname, "submit")
+
+    old_values = {
+        "vehicle_no": doc.vehicle_no,
+        "lr_no": doc.lr_no,
+        "lr_date": doc.lr_date,
+        "mode_of_transport": doc.mode_of_transport,
+        "gst_vehicle_type": doc.gst_vehicle_type,
+        "place_of_change": "-",
+        "state": "-",
+    }
+    
     values = frappe.parse_json(values)
+
     doc.db_set(
         {
             "vehicle_no": values.get("vehicle_no", "").replace(" ", ""),
@@ -334,7 +376,7 @@ def update_vehicle_info(*, doctype, docname, values):
     )
 
     data = EWaybillData(doc).get_update_vehicle_data(values)
-    result = EWaybillAPI(doc).update_vehicle_info(data)
+    result = EWaybillAPI.create(doc).update_vehicle_info(data)
 
     frappe.msgprint(
         _("Vehicle Info updated successfully"),
@@ -342,23 +384,26 @@ def update_vehicle_info(*, doctype, docname, values):
         alert=True,
     )
 
-    comment = _(
-        "Vehicle Info has been updated by {user}.<br><br> New details are: <br>"
-    ).format(user=frappe.bold(get_fullname()))
-
-    values_in_comment = {
-        "Vehicle No": values.vehicle_no,
-        "LR No": values.lr_no,
-        "LR Date": values.lr_date,
-        "Mode of Transport": values.mode_of_transport,
-        "GST Vehicle Type": values.gst_vehicle_type,
-        "Place of Change": values.place_of_change,
-        "State": values.state,
+    # Vehicle Info update labels and date fields for change log
+    VEHICLE_INFO_LABEL_MAP = {
+        "vehicle_no": "Vehicle No",
+        "lr_no": "LR No",
+        "lr_date": "LR Date",
+        "mode_of_transport": "Mode of Transport",
+        "gst_vehicle_type": "GST Vehicle Type",
+        "place_of_change": "Place of Change",
+        "state": "State",
     }
 
-    for key, value in values_in_comment.items():
-        if value:
-            comment += "{0}: {1} <br>".format(frappe.bold(_(key)), value)
+    VEHICLE_INFO_DATE_FIELDS = ("lr_date",)
+
+    comment = create_change_log_comment(
+        old_values,
+        values,
+        field_labels=VEHICLE_INFO_LABEL_MAP,
+        date_fields=VEHICLE_INFO_DATE_FIELDS,
+        comment_prefix=_("Vehicle Info has been updated by {user}"),
+    )
 
     log_and_process_e_waybill(
         doc,
@@ -372,7 +417,6 @@ def update_vehicle_info(*, doctype, docname, values):
     )
 
     return send_updated_doc(doc)
-
 
 def _bulk_update_transporter_in_docs(doctype, docnames, values):
     """
@@ -436,9 +480,11 @@ def _bulk_update_transporter_in_docs(doctype, docnames, values):
 @frappe.whitelist()
 def update_transporter(*, doctype, docname, values):
     doc = load_doc(doctype, docname, "submit")
+    old_transporter_id = doc.gst_transporter_id
+
     values = frappe.parse_json(values)
     data = EWaybillData(doc).get_update_transporter_data(values)
-    EWaybillAPI(doc).update_transporter(data)
+    EWaybillAPI.create(doc).update_transporter(data)
 
     frappe.msgprint(
         _("Transporter Info updated successfully"),
@@ -462,11 +508,12 @@ def update_transporter(*, doctype, docname, values):
     )
 
     comment = (
-        "Transporter Info has been updated by {user}. New Transporter ID is"
-        " {transporter_id}."
+        "Transporter Info has been updated by {user}. Transporter ID changed from"
+        " {old_transporter_id} to {new_transporter_id}."
     ).format(
         user=frappe.bold(get_fullname()),
-        transporter_id=frappe.bold(values.gst_transporter_id),
+        old_transporter_id=frappe.bold(old_transporter_id or "<empty>"),
+        new_transporter_id=frappe.bold(values.gst_transporter_id or "<empty>"),
     )
 
     log_and_process_e_waybill(
@@ -481,9 +528,8 @@ def update_transporter(*, doctype, docname, values):
 
     return send_updated_doc(doc)
 
-
 @frappe.whitelist()
-def extend_validity(*, doctype, docname, values, scheduled=False):
+def extend_validity(*, doctype, docname, values, scheduled: bool = False):
     doc = load_doc(doctype, docname, "submit")
     values = frappe.parse_json(values)
 
@@ -499,7 +545,7 @@ def extend_validity(*, doctype, docname, values, scheduled=False):
         )
 
     data = EWaybillData(doc).get_extend_validity_data(values)
-    result = EWaybillAPI(doc).extend_validity(data)
+    result = EWaybillAPI.create(doc).extend_validity(data)
 
     doc.db_set("distance", values.remaining_distance)
 
@@ -635,7 +681,7 @@ def generate_pending_e_waybills():
 
 
 @frappe.whitelist()
-def fetch_e_waybill_data(*, doctype, docname, attach=False):
+def fetch_e_waybill_data(*, doctype, docname, attach: bool = False):
     doc = load_doc(doctype, docname, "write" if attach else "print")
     log = frappe.get_doc("e-Waybill Log", doc.ewaybill)
     if not log.is_latest_data:
@@ -654,7 +700,7 @@ def fetch_e_waybill_data(*, doctype, docname, attach=False):
 
 
 def _fetch_e_waybill_data(doc, log):
-    result = EWaybillAPI(doc).get_e_waybill(log.e_waybill_number)
+    result = EWaybillAPI.create(doc).get_e_waybill(log.e_waybill_number)
     log.db_set(
         {
             "data": frappe.as_json(result, indent=4),
@@ -667,7 +713,7 @@ def _fetch_e_waybill_data(doc, log):
 def find_matching_e_waybill(*, doctype, docname, e_waybill_date):
     doc = load_doc(doctype, docname, "submit")
 
-    response = EWaybillAPI(doc).get_e_waybills_by_date(
+    response = EWaybillAPI.create(doc).get_e_waybills_by_date(
         format_date(e_waybill_date, "dd/mm/yyyy")
     )
 
@@ -1002,14 +1048,14 @@ def update_transaction(doc, values):
         "gst_vehicle_type": values.gst_vehicle_type,
     }
 
-    if doc.doctype == "Sales Invoice":
+    if doc.doctype in ["Sales Invoice", "Delivery Note"]:
         data["port_address"] = values.port_address
 
     doc.db_set(data)
 
     if doc.doctype in ("Delivery Note", "Stock Entry", "Subcontracting Receipt"):
         doc._sub_supply_type = SUB_SUPPLY_TYPES[values.sub_supply_type]
-    if doc.doctype == "Delivery Note":
+    if doc.doctype in ("Delivery Note", "Stock Entry"):
         doc._sub_supply_desc = values.sub_supply_desc
 
 
@@ -1055,7 +1101,8 @@ def get_address_map(doc):
 
 @frappe.whitelist()
 def get_source_destination_address(doctype, docname, address_type):
-    doc = frappe.get_doc(doctype, docname)
+    # using load_doc for onload trigger required for stock entry.
+    doc = load_doc(doctype, docname)
     address_map = get_billing_shipping_address_map(doc)
 
     if address_type == "source_address":
@@ -1275,19 +1322,8 @@ class EWaybillData(GSTTransactionData):
 
         self.validate_non_gst_items()
 
-        if is_outward_stock_entry(self.doc):
-            self.validate_different_gstin()
-        else:
+        if not is_outward_stock_entry(self.doc):
             self.validate_same_gstin()
-
-    def validate_different_gstin(self):
-        if self.doc.company_gstin != self.doc.get("supplier_gstin"):
-            frappe.throw(
-                _(
-                    "e-Waybill cannot be generated because party GSTIN and company GSTIN are different"
-                ),
-                title=_("Invalid Data"),
-            )
 
     def validate_same_gstin(self):
         if self.doc.doctype == "Delivery Note":
@@ -1512,6 +1548,7 @@ class EWaybillData(GSTTransactionData):
             ("Stock Entry", 0): {
                 "supply_type": "O",
                 "sub_supply_type": doc.get("_sub_supply_type", ""),
+                "sub_supply_desc": doc.get("_sub_supply_desc", ""),
                 "document_type": "CHL",
             },
             ("Stock Entry", 1): {
@@ -1769,3 +1806,50 @@ class EWaybillData(GSTTransactionData):
             "cessRate": item_details.cess_rate,
             "cessNonAdvol": item_details.cess_non_advol_rate,
         }
+
+#######################################################################################
+### Auto Cancel e-Waybill Functions ###################################################
+#######################################################################################
+
+
+def before_cancel(doc, method=None):
+    if not doc.get("ewaybill"):
+        return
+
+    gst_settings = frappe.get_cached_doc("GST Settings")
+
+    if not is_api_enabled(gst_settings):
+        return
+
+    run_onload(doc)
+
+    auto_cancel_e_waybill(doc, gst_settings=gst_settings)
+
+
+def auto_cancel_e_waybill(doc, gst_settings=None, e_waybill_info=None):
+    gst_settings = gst_settings or frappe.get_cached_doc("GST Settings")
+
+    if not (
+        doc.ewaybill
+        and gst_settings.enable_e_waybill
+        and gst_settings.auto_cancel_e_waybill
+    ):
+        return
+
+    e_waybill_info = e_waybill_info or doc.get_onload().get("e_waybill_info", {})
+    generated_on = e_waybill_info.get("created_on")
+    reason = gst_settings.reason_for_e_waybill_cancellation
+
+    if not generated_on or (add_days(generated_on, 1) < get_datetime()):
+        return
+
+    values = frappe._dict(
+        {
+            "reason": reason,
+            "remark": "",
+        }
+    )
+
+    _cancel_e_waybill(doc, values)
+
+    return True

@@ -23,4 +23,5 @@ def set_gstr_actions(doc, request_type, token, request_id, status=None):
         row["status"] = status
 
     doc.append("actions", row)
+    doc.flags.ignore_links = True
     doc.save()

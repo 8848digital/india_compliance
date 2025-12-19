@@ -28,9 +28,9 @@ frappe.ui.form.on(DOCTYPE, {
             ["invoice", "match_summary", "action_summary"],
             "invoice_html"
         );
-
+        
+        frm.doc.company = frappe.defaults.get_user_default("Company");
         frm.trigger("company");
-
         // Setup Listeners
 
         // Download Queued
@@ -54,7 +54,7 @@ frappe.ui.form.on(DOCTYPE, {
     async company(frm) {
         render_empty_state(frm);
         if (!frm.doc.company) return;
-        const options = await india_compliance.set_gstin_options(frm);
+        const options = await india_compliance.set_gstin_options(frm, false, true);
         frm.set_value("company_gstin", options[0]);
 
         set_period_options(frm);
@@ -684,14 +684,21 @@ class IMSAction {
     }
 
     async download_ims_data() {
-        await taxpayer_api.call({
+        const { message } = await taxpayer_api.call({
             method: `${DOC_PATH}.download_invoices`,
             args: { company_gstin: this.frm.doc.company_gstin },
         });
 
-        frappe.show_alert({
-            message: __("Downloading Invoices"),
-        });
+        if (message?.message) {
+            frappe.show_alert({
+                message: message.message,
+                indicator: message?.indicator || "blue",
+            });
+        } else {
+            frappe.show_alert({
+                message: __("Downloading Invoices"),
+            });
+        }
     }
 
     async get_ims_data() {

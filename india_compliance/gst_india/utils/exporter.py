@@ -27,6 +27,17 @@ class ExcelExporter:
 
         Worksheet().create(workbook=self.wb, **kwargs)
 
+    def insert_data(self, **kwargs):
+        """
+        insert data in worksheet
+        :param sheet_name - name for the worksheet
+        :param headers: A List of dictionary (cell properties will be optional)
+        :param data: A list of dictionary to append data to sheet
+        :param start_row: Row number to start inserting data
+        :param start_column: Column number to start inserting data
+        """
+        Worksheet().insert_data(workbook=self.wb, **kwargs)
+
     def save_workbook(self, file_name=None):
         """Save workbook"""
         if file_name:
@@ -125,6 +136,27 @@ class Worksheet:
             self.add_data(self.get_totals(), is_total=True)
 
         self.apply_conditional_formatting(add_totals)
+
+    def insert_data(
+        self,
+        workbook,
+        sheet_name,
+        headers,
+        data,
+        start_row=1,
+        start_column=1,
+    ):
+        sheet = workbook[sheet_name]
+
+        for i, row in enumerate(data, start_row):
+            for j, header in enumerate(headers, start_column):
+                fieldname, transform = header.get("fieldname"), header.get("transform")
+                value = row.get(fieldname)
+
+                if transform:
+                    value = transform(value, row)
+
+                sheet.cell(row=i, column=j, value=value or "")
 
     def add_data(self, data, **kwargs):
         if not data:

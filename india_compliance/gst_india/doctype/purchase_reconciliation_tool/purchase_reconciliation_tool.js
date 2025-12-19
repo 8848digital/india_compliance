@@ -68,7 +68,10 @@ frappe.ui.form.on(DOCTYPE, {
         new india_compliance.quick_info_popover(frm, tooltip_info);
 
         await frappe.require("purchase_reconciliation_tool.bundle.js");
+
+        frm.doc.company = frappe.defaults.get_user_default("Company");
         frm.trigger("company");
+        
         frm.reconciliation_tabs = new PurchaseReconciliationTool(
             frm,
             ["invoice", "supplier", "summary"],
@@ -94,7 +97,7 @@ frappe.ui.form.on(DOCTYPE, {
     async company(frm) {
         render_empty_state(frm);
         if (!frm.doc.company) return;
-        const options = await india_compliance.set_gstin_options(frm, true);
+        const options = await india_compliance.set_gstin_options(frm, true, true);
 
         frm.set_value("company_gstin", options[0]);
     },
@@ -1094,7 +1097,7 @@ class ImportDialog {
                 get_query: async () => {
                     let { message: gstin_list } = await frappe.call({
                         method: "india_compliance.gst_india.utils.get_gstin_list",
-                        args: { party: this.frm.doc.company },
+                        args: { party: this.frm.doc.company, exclude_isd: true },
                     });
 
                     gstin_list.unshift("All");
@@ -1220,7 +1223,14 @@ async function download_gstr(
             gst_categories,
         };
         frm.events.show_progress(frm, "download");
-        await frm.taxpayer_api_call("download_gstr", args);
+        const { message } = await frm.taxpayer_api_call("download_gstr", args);
+
+        if (message?.message) {
+            frappe.show_alert({
+                message: message.message,
+                indicator: message?.indicator || "blue",
+            });
+        }
     });
 }
 
