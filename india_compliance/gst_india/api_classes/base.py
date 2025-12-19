@@ -74,6 +74,7 @@ class BaseAPI:
         self.session_key = b64decode(row.session_key or "")
         self.session_expiry = row.session_expiry
         self.auth_token = row.auth_token
+        self.session_ip = row.session_ip
 
     def get_url(self, *parts):
         parts = list(parts)
@@ -141,6 +142,7 @@ class BaseAPI:
                     "body": json_data,
                 }
 
+        response = None
         response_json = None
 
         try:
@@ -186,6 +188,11 @@ class BaseAPI:
         finally:
             if response_json:
                 log.output = response_json.copy()
+            elif response:
+                log.output = {
+                    "status_code": response.status_code,
+                    "content": response.text,
+                }
 
             self.mask_sensitive_info(log)
 
