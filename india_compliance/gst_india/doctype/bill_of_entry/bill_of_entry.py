@@ -25,7 +25,10 @@ from india_compliance.gst_india.overrides.transaction import (
     set_gst_tax_type,
 )
 from india_compliance.gst_india.utils import get_gst_accounts_by_type
-from india_compliance.gst_india.utils.itc_claim import set_or_validate_itc_claim_period
+from india_compliance.gst_india.utils.itc_claim import (
+    _validate_itc_claim_period,
+    set_or_validate_itc_claim_period,
+)
 from india_compliance.gst_india.utils.taxes_controller import (
     CustomTaxController,
     update_gst_details,
@@ -82,8 +85,8 @@ class BillofEntry(Document):
         make_gl_entries(gl_entries)
         self.update_pending_boe_qty()
 
-    def before_update_after_submit(self):
-        validate_itc_claim_period(self)
+    def on_update_after_submit(self):
+        _validate_itc_claim_period(self)
 
     def on_cancel(self):
         self.ignore_linked_doctypes = ("GL Entry",)
