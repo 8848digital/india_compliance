@@ -7,9 +7,11 @@
  "engine": "InnoDB",
  "field_order": [
   "company",
+  "enqueue_report",
   "filter_by",
   "column_break_pvct",
   "company_gstin",
+  "generation_status",
   "filing_status",
   "column_break_ddqq",
   "year",
@@ -78,9 +80,9 @@
    "read_only": 1
   },
   {
+   "default": "Not Filed",
    "fieldname": "filing_status",
    "fieldtype": "Select",
-   "is_virtual": 1,
    "label": "Filing Status",
    "options": "Not Filed\nFiled",
    "read_only": 1

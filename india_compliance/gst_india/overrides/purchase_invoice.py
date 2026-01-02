@@ -20,11 +20,7 @@ from india_compliance.gst_india.utils import (
     validate_invoice_number,
 )
 from india_compliance.gst_india.utils.e_waybill import get_e_waybill_info
-from india_compliance.gst_india.utils.itc_claim import (
-    _is_gstr3b_filed,
-    set_or_validate_itc_claim_period,
-    validate_itc_claim_period,
-)
+from india_compliance.gst_india.utils.itc_claim import set_or_validate_itc_claim_period
 
 
 def onload(doc, method=None):
