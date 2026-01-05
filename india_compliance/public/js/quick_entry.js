@@ -176,9 +176,12 @@ class PartyQuickEntryForm extends GSTQuickEntryForm {
                 fieldname: "map_to_first_name",
                 fieldtype: "Data",
 <<<<<<< HEAD
+<<<<<<< HEAD
                 depends_on: "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
 =======
 <<<<<<< HEAD
+=======
+>>>>>>> 19229353 (chore: formatting changes)
 <<<<<<< HEAD
                 depends_on:
                     "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
@@ -189,6 +192,9 @@ class PartyQuickEntryForm extends GSTQuickEntryForm {
                 depends_on:
                     "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
 >>>>>>> e2ee5690 (chore: formatting changes)
+<<<<<<< HEAD
+>>>>>>> 19229353 (chore: formatting changes)
+=======
 >>>>>>> 19229353 (chore: formatting changes)
             },
             {
@@ -199,9 +205,12 @@ class PartyQuickEntryForm extends GSTQuickEntryForm {
                 fieldname: "map_to_last_name",
                 fieldtype: "Data",
 <<<<<<< HEAD
+<<<<<<< HEAD
                 depends_on: "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
 =======
 <<<<<<< HEAD
+=======
+>>>>>>> 19229353 (chore: formatting changes)
 <<<<<<< HEAD
                 depends_on:
                     "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
@@ -212,6 +221,9 @@ class PartyQuickEntryForm extends GSTQuickEntryForm {
                 depends_on:
                     "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
 >>>>>>> e2ee5690 (chore: formatting changes)
+<<<<<<< HEAD
+>>>>>>> 19229353 (chore: formatting changes)
+=======
 >>>>>>> 19229353 (chore: formatting changes)
             },
             {
