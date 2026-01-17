@@ -97,7 +97,7 @@ class GSTQuickEntryForm extends frappe.ui.form.QuickEntryForm {
                 onchange: () => {
                     const d = this.dialog;
 
-                    india_compliance.check_duplicate_gstin(d.doc._gstin, this.doctype);
+                    check_duplicate_gstin(d, this.doctype);
 
                     if (["Customer", "Supplier"].includes(this.doctype)) {
                         d.set_value(
@@ -112,10 +112,7 @@ class GSTQuickEntryForm extends frappe.ui.form.QuickEntryForm {
 
                     d.set_value(
                         "gst_category",
-                        india_compliance.guess_gst_category(
-                            d.doc._gstin,
-                            d.doc.country,
-                        ),
+                        india_compliance.guess_gst_category(d.doc._gstin, d.doc.country)
                     );
                 },
             },
@@ -178,27 +175,7 @@ class PartyQuickEntryForm extends GSTQuickEntryForm {
                 label: __("First Name"),
                 fieldname: "map_to_first_name",
                 fieldtype: "Data",
-<<<<<<< HEAD
-<<<<<<< HEAD
                 depends_on: "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
-=======
-<<<<<<< HEAD
-=======
->>>>>>> 19229353 (chore: formatting changes)
-<<<<<<< HEAD
-                depends_on:
-                    "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
-=======
-                depends_on: "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
->>>>>>> 5c96a450 (fix: add duplicate check to quick entry)
-=======
-                depends_on:
-                    "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
->>>>>>> e2ee5690 (chore: formatting changes)
-<<<<<<< HEAD
->>>>>>> 19229353 (chore: formatting changes)
-=======
->>>>>>> 19229353 (chore: formatting changes)
             },
             {
                 fieldtype: "Column Break",
@@ -207,27 +184,7 @@ class PartyQuickEntryForm extends GSTQuickEntryForm {
                 label: __("Last Name"),
                 fieldname: "map_to_last_name",
                 fieldtype: "Data",
-<<<<<<< HEAD
-<<<<<<< HEAD
                 depends_on: "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
-=======
-<<<<<<< HEAD
-=======
->>>>>>> 19229353 (chore: formatting changes)
-<<<<<<< HEAD
-                depends_on:
-                    "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
-=======
-                depends_on: "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
->>>>>>> 5c96a450 (fix: add duplicate check to quick entry)
-=======
-                depends_on:
-                    "eval:doc.customer_type=='Company' || doc.supplier_type=='Company'",
->>>>>>> e2ee5690 (chore: formatting changes)
-<<<<<<< HEAD
->>>>>>> 19229353 (chore: formatting changes)
-=======
->>>>>>> 19229353 (chore: formatting changes)
             },
             {
                 fieldname: "primary_contact_section_2",
@@ -556,11 +513,8 @@ function get_gstin_description() {
     }
 
     return __("Autofill is not supported in sandbox mode");
-<<<<<<< HEAD
 }
-=======
-}
-<<<<<<< HEAD
+
 
 function check_duplicate_gstin(dialog, doctype) {
     let gstin = dialog.doc._gstin;
@@ -587,6 +541,3 @@ function check_duplicate_gstin(dialog, doctype) {
         },
     });
 }
->>>>>>> 22c72490 (fix: add duplicate check to quick entry)
-=======
->>>>>>> 66445de8 (fix: don't check duplicate party for address; refactor with common utils)
