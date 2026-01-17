@@ -97,7 +97,11 @@ class GSTQuickEntryForm extends frappe.ui.form.QuickEntryForm {
                 onchange: () => {
                     const d = this.dialog;
 
-                    check_duplicate_gstin(d, this.doctype);
+                    if (this.doctype !== "Address")
+                        india_compliance.check_duplicate_gstin(
+                            d.doc._gstin,
+                            this.doctype,
+                        );
 
                     if (["Customer", "Supplier"].includes(this.doctype)) {
                         d.set_value(
@@ -112,7 +116,10 @@ class GSTQuickEntryForm extends frappe.ui.form.QuickEntryForm {
 
                     d.set_value(
                         "gst_category",
-                        india_compliance.guess_gst_category(d.doc._gstin, d.doc.country)
+                        india_compliance.guess_gst_category(
+                            d.doc._gstin,
+                            d.doc.country,
+                        ),
                     );
                 },
             },
@@ -557,6 +564,7 @@ function get_gstin_description() {
 }
 =======
 }
+<<<<<<< HEAD
 
 function check_duplicate_gstin(dialog, doctype) {
     let gstin = dialog.doc._gstin;
@@ -584,3 +592,5 @@ function check_duplicate_gstin(dialog, doctype) {
     });
 }
 >>>>>>> 22c72490 (fix: add duplicate check to quick entry)
+=======
+>>>>>>> 66445de8 (fix: don't check duplicate party for address; refactor with common utils)
