@@ -5,6 +5,13 @@ class GSPServerError(frappe.ValidationError):
     message = "GSP/GST server is down"
     title = "GSP/GST Server Error"
 
+
+class EInvoiceAlreadyGenerated(frappe.ValidationError):
+    """Raised when e-Invoice has already been generated for the document."""
+
+    pass
+
+
 class GSPLimitExceededError(GSPServerError):
     message = "GSP/GST account limit exceeded"
     http_status_code = 429
