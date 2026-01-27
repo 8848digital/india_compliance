@@ -50,7 +50,6 @@ frappe.query_reports["Summary of ITC Availed"] = {
             fieldtype: "Select",
             default: "ITC Claim Period",
             options: ["ITC Claim Period", "Posting Date"],
-            reqd: 1,
         },
     ],
 

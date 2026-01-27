@@ -62,7 +62,6 @@ frappe.query_reports["HSN-wise-summary of inward supplies"] = {
             fieldtype: "Select",
             default: "ITC Claim Period",
             options: ["ITC Claim Period", "Posting Date"],
-            reqd: 1,
         },
     ],
 };
