@@ -144,14 +144,13 @@ class GSTR3BQuery:
         self.JE_ACCOUNT = frappe.qb.DocType("Journal Entry Account")
         self.filters = frappe._dict(filters or {})
 
-    def apply_itc_period_filter(self, query, doc, doctype):
+    def apply_itc_period_filter(self, query, doc):
         """Apply ITC period filter"""
         return _apply_itc_period_filter(
             query,
             doc,
             self.filters.get("from_date"),
             self.filters.get("to_date"),
-            doctype=doctype,
             filter_by=self.filters.get("filter_by"),
         )
 
@@ -208,7 +207,7 @@ class GSTR3BQuery:
             .where(self.PI.is_boe_applicable == 0)
         )
 
-        return self.get_query_with_common_filters(query, self.PI, "Purchase Invoice")
+        return self.get_query_with_common_filters(query, self.PI)
 
     def get_base_boe_query(self):
         query = (
@@ -255,7 +254,7 @@ class GSTR3BQuery:
             )
         )
 
-        return self.get_query_with_common_filters(query, self.BOE, "Bill of Entry")
+        return self.get_query_with_common_filters(query, self.BOE)
 
     def get_base_je_query(self):
         key_field_map = {
@@ -307,9 +306,9 @@ class GSTR3BQuery:
             .groupby(self.JE.name)
         )
 
-        return self.get_query_with_common_filters(query, self.JE, "Journal Entry")
+        return self.get_query_with_common_filters(query, self.JE)
 
-    def get_query_with_common_filters(self, query, doc, doctype=None):
+    def get_query_with_common_filters(self, query, doc):
         """
         Apply common filters to the query.
         """
@@ -317,7 +316,7 @@ class GSTR3BQuery:
             (doc.docstatus == 1) & (doc.company == self.filters.company)
         )
 
-        query = self.apply_itc_period_filter(query, doc, doctype)
+        query = self.apply_itc_period_filter(query, doc)
 
         if self.filters.company_gstin:
             query = query.where(doc.company_gstin == self.filters.company_gstin)
