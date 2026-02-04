@@ -26,17 +26,12 @@ from india_compliance.gst_india.utils import (
     get_period,
 )
 from india_compliance.gst_india.utils.exporter import ExcelExporter
-<<<<<<< HEAD
-=======
+
 from india_compliance.gst_india.utils.gstr_1.gstr_1_data import GSTR11A11BData
-<<<<<<< HEAD
 from india_compliance.gst_india.utils.itc_claim import format_period
->>>>>>> 0bc69747 (feat: introduce itc claim period to allow customizing how to claim itc)
-=======
 from india_compliance.gst_india.utils.itc_claim import (
     apply_period_filter as _apply_itc_period_filter,
 )
->>>>>>> 716f8fb7 (fix: refactor ITC claim period handling in GSTR 3B report)
 
 VALUES_TO_UPDATE = ["iamt", "camt", "samt", "csamt"]
 GST_TAX_TYPE_MAP = {
@@ -592,23 +587,23 @@ class GSTR3BReport(Document):
     def get_outward_items(self, doctype):
         if not self.invoice_map:
             return {}
-        table = frappe.qb.DocType(f"{doctype} Item")
-        fields = [
-            table.item_code,
-            table.item_name,
-            table.parent,
-            table.taxable_value,
-            table.gst_treatment,
-        ]
-        for tax in GST_TAX_TYPE_MAP:
-            fields.append(table[f"{tax}_amount"])
 
-        invoice_list = list(self.invoice_map.keys())
+        item_doctype = f"{doctype} Item"
+        item = frappe.qb.DocType(item_doctype)
+
+        tax_fields = [getattr(item, f"{tax}_amount") for tax in GST_TAX_TYPE_MAP]
 
         query = (
-            frappe.qb.from_(table)
-            .select(*fields)
-            .where(table.parent.isin(invoice_list))
+            frappe.qb.from_(item)
+            .select(
+                *tax_fields,
+                item.item_code,
+                item.item_name,
+                item.parent,
+                item.taxable_value,
+                item.gst_treatment,
+            )
+            .where(item.parent.isin(list(self.invoice_map.keys())))
         )
 
         return query.run(as_dict=True)
@@ -726,27 +721,24 @@ class GSTR3BReport(Document):
         missing_field_invoices = []
 
         for doctype in INVOICE_DOCTYPES:
+            invoice = frappe.qb.DocType(doctype)
             party_gstin = (
-                "billing_address_gstin" if doctype == "Sales Invoice" else "supplier_gstin"
+                invoice.billing_address_gstin
+                if doctype == "Sales Invoice"
+                else invoice.supplier_gstin
             )
 
-            invoice = frappe.qb.DocType(doctype)
-
-            query = (
+            docnames = (
                 frappe.qb.from_(invoice)
                 .select(invoice.name)
-                .where(
-                    (invoice.docstatus == 1)
-                    & (invoice.is_opening == "No")
-                    & (invoice.posting_date.between(self.from_date, self.to_date))
-                    & (invoice.company == self.company)
-                    & (invoice.place_of_supply.isnull())
-                    & (invoice.company_gstin != IfNull(Field(party_gstin), ""))
-                    & (invoice.gst_category != "Overseas")
-                )
-            )
-
-            docnames = query.run(as_dict=True)
+                .where(invoice.docstatus == 1)
+                .where(invoice.is_opening == "No")
+                .where(invoice.posting_date.between(self.from_date, self.to_date))
+                .where(invoice.company == self.company)
+                .where(invoice.place_of_supply.isnull())
+                .where(invoice.company_gstin != IfNull(party_gstin, ""))
+                .where(invoice.gst_category != "Overseas")
+            ).run(as_dict=True)
 
             for d in docnames:
                 missing_field_invoices.append(d.name)
