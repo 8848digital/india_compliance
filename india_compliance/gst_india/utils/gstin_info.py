@@ -41,9 +41,11 @@ CHARACTERS_TO_STRIP = f"{whitespace},"
 
 # nosemgrep: frappe-semgrep-rules.rules.security.missing-argument-type-hint
 @frappe.whitelist()
-# nosemgrep: frappe-semgrep-rules.rules.security.missing-argument-type-hint
 def get_gstin_info(
-    gstin: str, *, doc: str | dict | None = None, throw_error: bool = True
+    gstin: str,
+    *,  # nosemgrep: frappe-semgrep-rules.rules.security.missing-argument-type-hint
+    doc: str | dict | None = None,
+    throw_error: bool = True,
 ):
     if doc and isinstance(doc, str):
         doc = frappe.parse_json(doc)
