@@ -192,9 +192,7 @@ class GSTInvoiceManagementSystem(Document):
         )
 
     @frappe.whitelist()
-    def get_invoice_details(
-        self, purchase_name: str | None, inward_supply_name: str | None
-    ):
+    def get_invoice_details(self, purchase_name: str, inward_supply_name: str):
         frappe.has_permission("GST Invoice Management System", "write", throw=True)
 
         inward_supply_names = [inward_supply_name] if inward_supply_name else None
@@ -226,10 +224,7 @@ class GSTInvoiceManagementSystem(Document):
 
     @frappe.whitelist()
     def link_documents(
-        self,
-        purchase_invoice_name: str | None,
-        inward_supply_name: str | None,
-        link_doctype: str | None,
+        self, purchase_invoice_name: str, inward_supply_name: str, link_doctype: str
     ):
         frappe.has_permission("GST Invoice Management System", "write", throw=True)
 
@@ -248,7 +243,7 @@ class GSTInvoiceManagementSystem(Document):
         return self.get_invoice_data(inward_supplies, purchases)
 
     @frappe.whitelist()
-    def get_link_options(self, doctype: str, filters: dict | frappe._dict):
+    def get_link_options(self, doctype: str, filters: str | dict):
         frappe.has_permission("GST Invoice Management System", "write", throw=True)
 
         if isinstance(filters, dict):
@@ -340,7 +335,7 @@ def check_action_status(company_gstin: str, action: str):
 
 
 @frappe.whitelist()
-def download_excel_report(data: str | list, doc: str | dict | frappe._dict):
+def download_excel_report(data: str | list, doc: str | dict):
     frappe.has_permission("GST Invoice Management System", "export", throw=True)
 
     build_data = BuildExcelIMS(doc, data)

@@ -65,7 +65,7 @@ from india_compliance.gst_india.utils.transaction_data import GSTTransactionData
 
 
 @frappe.whitelist()
-def enqueue_bulk_e_invoice_generation(docnames: str):
+def enqueue_bulk_e_invoice_generation(docnames: str | list):
     """
     Enqueue bulk generation of e-Invoices for the given Sales Invoices.
     """
@@ -272,10 +272,10 @@ def generate_e_invoice(docname: str, throw: bool = True, force: bool = False):
 @frappe.whitelist()
 @otp_handler
 def handle_duplicate_irn_error(
-    irn_data: str | dict | frappe._dict,
+    irn_data: str | dict,
     current_gstin: str,
     current_invoice_amount: float,
-    doc: str | dict | Document | None = None,
+    doc: str | dict | None = None,
     docname: str | None = None,
     taxpayer_api: bool = False,
 ):
@@ -427,7 +427,7 @@ def log_and_process_e_invoice_generation(doc, result, sandbox_mode=False, messag
 
 
 @frappe.whitelist()
-def cancel_e_invoice(docname: str, values: str | dict | frappe._dict):
+def cancel_e_invoice(docname: str, values: str | dict):
     doc = load_doc("Sales Invoice", docname, "cancel")
     values = frappe.parse_json(values)
 
@@ -484,9 +484,7 @@ def log_and_process_e_invoice_cancellation(doc, values, result, message):
 
 
 @frappe.whitelist()
-def mark_e_invoice_as_generated(
-    doctype: str, docname: str, values: str | dict | frappe._dict
-):
+def mark_e_invoice_as_generated(doctype: str, docname: str, values: str | dict):
     doc = load_doc(doctype, docname, "submit")
 
     values = frappe.parse_json(values)
@@ -505,9 +503,7 @@ def mark_e_invoice_as_generated(
 
 
 @frappe.whitelist()
-def mark_e_invoice_as_cancelled(
-    doctype: str, docname: str, values: str | dict | frappe._dict
-):
+def mark_e_invoice_as_cancelled(doctype: str, docname: str, values: str | dict):
     doc = load_doc(doctype, docname, "cancel")
 
     if doc.docstatus != 2:

@@ -407,7 +407,7 @@ class BillofEntry(Document):
         return asset_items
 
     @frappe.whitelist()
-    def get_items_from_purchase_invoice(self, purchase_invoices: list[str]):
+    def get_items_from_purchase_invoice(self, purchase_invoices: str | list):
         if not purchase_invoices:
             frappe.msgprint(_("No Purchase Invoices selected"))
             return
@@ -824,7 +824,7 @@ def fetch_pending_boe_invoices(
     searchfield: str,
     start: int,
     page_len: int,
-    filters: str | dict | frappe._dict,
+    filters: str | dict,
 ):
     """
     Permission check not required as using get_list

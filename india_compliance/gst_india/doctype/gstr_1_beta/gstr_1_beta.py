@@ -1,6 +1,7 @@
 # Copyright (c) 2024, Resilient Tech and contributors
 # For license information, please see license.txt
 
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -253,7 +254,7 @@ def check_action_status(
 
 
 @frappe.whitelist()
-def mark_as_unfiled(filters: str | dict | frappe._dict, force: bool):
+def mark_as_unfiled(filters: str | dict, force: bool):
     frappe.has_permission("GST Return Log", "write", throw=True)
 
     filters = frappe._dict(frappe.parse_json(filters))
@@ -385,7 +386,7 @@ def make_journal_entry(
     month_or_quarter: str,
     year: str,
     accounts: str | list,
-    values: str | dict | frappe._dict,
+    values: str | dict,
 ):
     if not frappe.has_permission("Journal Entry", "create"):
         return
@@ -491,10 +492,15 @@ def get_gstr_1_from_and_to_date(
 
 
 @frappe.whitelist()
+<<<<<<< HEAD:india_compliance/gst_india/doctype/gstr_1_beta/gstr_1_beta.py
+def get_filing_preference_from_log(month_or_quarter: str, year: str, company_gstin):
+    frappe.has_permission("GSTR-1 Beta", throw=True)
+=======
 def get_filing_preference_from_log(
     month_or_quarter: str, year: str, company_gstin: str
 ):
-    frappe.has_permission("GSTR-1 Beta", throw=True)
+    frappe.has_permission("GSTR-1", throw=True)
+>>>>>>> 27d9b65b (chore: added type hints to whitelisted functions):india_compliance/gst_india/doctype/gstr_1/gstr_1.py
 
     period = get_period(month_or_quarter, year)
     filing_preference = frappe.db.get_value(
