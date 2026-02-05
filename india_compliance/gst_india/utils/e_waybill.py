@@ -97,7 +97,7 @@ def generate_e_waybill_json(
 
 @frappe.whitelist()
 def bulk_update_transporter_in_docs(
-    doctype: str, docnames: str | list, values: str | dict
+    doctype: str, docnames: str | list, values: str | dict | frappe._dict
 ):
     frappe.has_permission(doctype, "submit", throw=True)
 
@@ -376,7 +376,7 @@ def log_and_process_e_waybill_generation(doc, result, *, with_irn=False):
 
 # nosemgrep: frappe-semgrep-rules.rules.security.missing-argument-type-hint
 @frappe.whitelist()
-def cancel_e_waybill(*, doctype: str, docname: str, values: str | dict):
+def cancel_e_waybill(*, doctype: str, docname: str, values: str | dict | frappe._dict):
     """Permission check not required as load_doc checks permissions."""
     doc = load_doc(doctype, docname, "cancel")
     values = frappe.parse_json(values)
@@ -439,7 +439,9 @@ def log_and_process_e_waybill_cancellation(doc, values, result):
 
 # nosemgrep: frappe-semgrep-rules.rules.security.missing-argument-type-hint
 @frappe.whitelist()
-def update_vehicle_info(*, doctype: str, docname: str, values: str | dict):
+def update_vehicle_info(
+    *, doctype: str, docname: str, values: str | dict | frappe._dict
+):
     """Permission check not required as load_doc checks permissions."""
     doc = load_doc(doctype, docname, "submit")
 
@@ -569,7 +571,9 @@ def _bulk_update_transporter_in_docs(doctype, docnames, values):
 
 # nosemgrep: frappe-semgrep-rules.rules.security.missing-argument-type-hint
 @frappe.whitelist()
-def update_transporter(*, doctype: str, docname: str, values: str | dict):
+def update_transporter(
+    *, doctype: str, docname: str, values: str | dict | frappe._dict
+):
     """Permission check not required as load_doc checks permissions."""
     doc = load_doc(doctype, docname, "submit")
     old_transporter_id = doc.gst_transporter_id
@@ -626,7 +630,11 @@ def update_transporter(*, doctype: str, docname: str, values: str | dict):
 # nosemgrep: frappe-semgrep-rules.rules.security.missing-argument-type-hint
 @frappe.whitelist()
 def extend_validity(
-    *, doctype: str, docname: str, values: str | dict, scheduled: bool = False
+    *,
+    doctype: str,
+    docname: str,
+    values: str | dict | frappe._dict,
+    scheduled: bool = False,
 ):
     """Permission check not required as load_doc checks permissions."""
     doc = load_doc(doctype, docname, "submit")
@@ -723,7 +731,10 @@ def validate_data_before_schedule(doc, values):
 
 @frappe.whitelist()
 def schedule_ewaybill_for_extension(
-    doctype: str, docname: str, values: str | dict, scheduled_time: str | datetime
+    doctype: str,
+    docname: str,
+    values: str | dict | frappe._dict,
+    scheduled_time: str | datetime,
 ):
     """Permission check not required as load_doc checks permissions."""
     values = frappe.parse_json(values)
@@ -852,7 +863,9 @@ def find_matching_e_waybill(*, doctype: str, docname: str, e_waybill_date: str):
 
 
 @frappe.whitelist()
-def mark_e_waybill_as_generated(doctype: str, docname: str, values: str | dict):
+def mark_e_waybill_as_generated(
+    doctype: str, docname: str, values: str | dict | frappe._dict
+):
     """Permission check not required as load_doc checks permissions."""
     doc = load_doc(doctype, docname, "submit")
     values = frappe.parse_json(values)
@@ -869,7 +882,9 @@ def mark_e_waybill_as_generated(doctype: str, docname: str, values: str | dict):
 
 
 @frappe.whitelist()
-def mark_e_waybill_as_cancelled(doctype: str, docname: str, values: str | dict):
+def mark_e_waybill_as_cancelled(
+    doctype: str, docname: str, values: str | dict | frappe._dict
+):
     """Permission check not required as load_doc checks permissions."""
     doc = load_doc(doctype, docname, "cancel")
     values = frappe.parse_json(values)
