@@ -1,5 +1,6 @@
 # Copyright (c) 2022, Resilient Tech and contributors
 # For license information, please see license.txt
+from __future__ import annotations
 
 import re
 from collections import defaultdict
@@ -107,7 +108,7 @@ class PurchaseReconciliationTool(Document):
         )
 
     @frappe.whitelist()
-    def reconcile_and_generate_data(self):
+    def reconcile_and_generate_data(self: PurchaseReconciliationTool):
         frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
 
         # reconcile purchases and inward supplies
