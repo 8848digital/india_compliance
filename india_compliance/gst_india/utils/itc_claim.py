@@ -25,10 +25,6 @@ from india_compliance.gst_india.utils import get_period
 SUPPORTED_DOCTYPES = frozenset(("Purchase Invoice", "Bill of Entry"))
 SUPPORTED_TABLE_NAMES = frozenset(get_table_name(dt) for dt in SUPPORTED_DOCTYPES)
 ITC_CLAIM_PERIOD_DEFERRED = "Deferred"
-FILING_STATUS = {
-    "Filed": "Filed",  # ACTION : STATUS
-    "Not Filed": "Unfiled",
-}
 
 
 def set_or_validate_itc_claim_period(doc) -> None:
@@ -71,9 +67,7 @@ def set_itc_claim_period_on_match(
 
 
 def set_itc_claim_period_on_ims_action(
-    invoice_names: Sequence[str],
-    action: str,
-    ims_period: str | None = None,
+    invoice_names: Sequence[str], action: str, ims_period: str | None = None
 ) -> None:
     if not invoice_names:
         return
@@ -146,7 +140,7 @@ def get_itc_period_options(
 
 @frappe.whitelist()
 def update_gstr3b_filing_status(
-    company_gstin: str, month_or_quarter: str, year: int | str, status: str
+    company_gstin: str, month_or_quarter: str, year: str, status: str
 ) -> None:
     frappe.has_permission("GST Return Log", "write", throw=True)
     if status not in FILING_STATUS:
@@ -212,7 +206,7 @@ def apply_period_filter(
     return query.where(doc.posting_date[from_date:to_date])
 
 
-def period_to_date(
+def _period_to_date(
     period: str, day: Literal["first", "last"] = "first"
 ) -> datetime.date:
     if not period or len(period) != 6:
@@ -223,23 +217,20 @@ def period_to_date(
     return get_last_day(date) if day == "last" else date
 
 
-def period_sort_key(period: str) -> str:
-    """Convert MMYYYY → YYYYMM for natural string comparison."""
-    return period[2:] + period[:2]
-
-
-def compare_periods(p1: str, p2: str) -> int:
-    """Compare two MMYYYY periods. Returns -1, 0, or 1."""
-    key1, key2 = period_sort_key(p1), period_sort_key(p2)
-    return (key1 > key2) - (key1 < key2)
+def _compare_periods(p1: str, p2: str) -> int:
+    return (
+        -1
+        if p1[2:] + p1[:2] < p2[2:] + p2[:2]
+        else (1 if p1[2:] + p1[:2] > p2[2:] + p2[:2] else 0)
+    )
 
 
 def _next_period(period: str) -> str:
-    return format_period(add_months(period_to_date(period), 1))
+    return format_period(add_months(_period_to_date(period), 1))
 
 
 def _max_period(p1: str, p2: str) -> str:
-    return max(p1, p2, key=period_sort_key)
+    return p1 if _compare_periods(p1, p2) >= 0 else p2
 
 
 def _validate_period_format(period: str) -> None:
@@ -314,6 +305,21 @@ def _get_next_unfiled_period(
     return None
 
 
+def _sync_gstr3b_report_status(
+    gstin: str, month_or_quarter: str, year: str, status: str
+) -> None:
+    frappe.db.set_value(
+        "GSTR 3B Report",
+        {
+            "company_gstin": gstin,
+            "month_or_quarter": month_or_quarter,
+            "year": year,
+        },
+        "filing_status",
+        status,
+    )
+
+
 # =============================================================================
 # ITC Calculation
 # =============================================================================
@@ -326,8 +332,8 @@ def _calculate_itc_claim_period(
     ims_action: str | None = None,
     ims_period: str | None = None,
 ) -> str | None:
-    # skip if already filed
-    if filed and doc.itc_claim_period and doc.itc_claim_period in filed:
+    # already filed
+    if filed and doc.itc_claim_period not in filed:
         return None
 
     # FIRST PREFERENCE: IMS ACTION
@@ -358,7 +364,7 @@ def _calculate_itc_claim_period(
     )
 
 
-def validate_itc_claim_period(doc) -> None:
+def _validate_itc_claim_period(doc) -> None:
     validate_mandatory_fields(doc, "itc_claim_period")
     _validate_period_format(doc.itc_claim_period)
     _validate_itc_claim_period_for_rcm_invoice(doc)
@@ -477,12 +483,20 @@ def _fetch_document_data(
     return query.run(as_dict=True)
 
 
-def _fetch_inward_supply_data(
-    names: Sequence[str], only_linked: bool = False
-) -> list[dict]:
-    gstr2 = frappe.qb.DocType("GST Inward Supply")
-    query = (
-        frappe.qb.from_(gstr2)
+def _fetch_inward_supply_data(names: list[str]) -> list[dict]:
+    GSTR2 = frappe.qb.DocType("GST Inward Supply")
+    return (
+        frappe.qb.from_(GSTR2)
+        .select(GSTR2.name, GSTR2.return_period_2b, GSTR2.ims_action)
+        .where(GSTR2.name.isin(names))
+        .run(as_dict=True)
+    )
+
+
+def _fetch_linked_documents(invoice_names: Sequence[str]) -> list[dict]:
+    GSTR2 = frappe.qb.DocType("GST Inward Supply")
+    return (
+        frappe.qb.from_(GSTR2)
         .select(
             gstr2.name,
             gstr2.return_period_2b,
