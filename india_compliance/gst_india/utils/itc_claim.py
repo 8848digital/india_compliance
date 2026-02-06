@@ -67,15 +67,17 @@ def set_itc_claim_period_on_match(
 
 
 def set_itc_claim_period_on_ims_action(
-    invoice_names: Sequence[str], action: str, ims_period: str | None = None
+    invoice_names: Sequence[str],
+    action: Literal["Accepted", "Rejected", "Pending"],
+    ims_period: str | None = None,
 ) -> None:
     if not invoice_names:
         return
 
     if action not in ("Accepted", "Rejected", "Pending"):
-        return
+        frappe.throw(_("Invalid action: {0}").format(action))
 
-    linked = _fetch_inward_supply_data(invoice_names, only_linked=True)
+    linked = _fetch_linked_documents(invoice_names)
     if not linked:
         return
 
