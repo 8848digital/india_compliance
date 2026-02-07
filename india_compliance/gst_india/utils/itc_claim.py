@@ -152,6 +152,14 @@ def update_gstr3b_filing_status(
             )
         )
 
+    allowed_status = ("Filed", "Not Filed")
+    if status not in allowed_status:
+        frappe.throw(
+            _("Invalid filing status: {0}. Allowed values are: {1}").format(
+                status, ", ".join(allowed_status)
+            )
+        )
+
     period = get_period(month_or_quarter, year)
     filters = {"gstin": company_gstin, "return_period": period, "return_type": "GSTR3B"}
     log_name = frappe.db.get_value("GST Return Log", filters)
