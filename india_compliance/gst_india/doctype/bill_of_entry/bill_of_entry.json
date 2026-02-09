@@ -274,6 +274,15 @@
    "read_only": 1
   },
   {
+   "allow_on_submit": 1,
+   "description": "GSTR-3B period for claiming ITC (MMYYYY) or 'Deferred' to postpone.",
+   "fieldname": "itc_claim_period",
+   "fieldtype": "Autocomplete",
+   "label": "ITC Claim Period",
+   "no_copy": 1,
+   "print_hide": 1
+  },
+  {
    "fieldname": "tax_category",
    "fieldtype": "Link",
    "label": "Tax Category",
