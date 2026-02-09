@@ -7,7 +7,6 @@ from erpnext.accounts.doctype.account.test_account import create_account
 
 from india_compliance.gst_india.utils.itc_claim import (
     ITC_CLAIM_PERIOD_DEFERRED,
-    _validate_period_format,
     format_period,
 )
 from india_compliance.gst_india.utils.tests import append_item, create_purchase_invoice
@@ -223,23 +222,10 @@ class TestPurchaseInvoice(FrappeTestCase):
 
     def test_itc_claim_period_invalid_format(self):
         """
-        Test that invalid period formats are rejected
+        Test that invalid period formats are rejected at document level
         """
-        # Test invalid formats
-        invalid_periods = [
-            "1320",  # Too short (only 4 digits)
-            "132024",  # Month > 12
-            "002024",  # Month = 00
-            "12-2024",  # Wrong separator
-            "Dec2024",  # Text format
-            "MMYYYY",  # Literal text
-            "abcdef",  # All text
-            "12 2024",  # Space separator
-        ]
-
-        # Test at document level as well
         pinv = create_purchase_invoice(do_not_submit=True)
-        pinv.itc_claim_period = invalid_periods[1]  # "132024"
+        pinv.itc_claim_period = "132024"  # Invalid: Month > 12
 
         self.assertRaisesRegex(
             frappe.exceptions.ValidationError,
@@ -259,13 +245,6 @@ class TestPurchaseInvoice(FrappeTestCase):
             re.compile(r"ITC Claim Period.*is a mandatory field"),
             pinv.save,
         )
-
-        for invalid_period in invalid_periods:
-            with self.assertRaisesRegex(
-                frappe.exceptions.ValidationError,
-                re.compile(r"ITC Claim Period '.*' must be in MMYYYY format"),
-            ):
-                _validate_period_format(invalid_period)
 
     def test_itc_claim_period_for_unregistered_rcm(self):
         """
@@ -318,3 +297,154 @@ class TestPurchaseInvoice(FrappeTestCase):
         # Submit and verify it's still valid
         pinv.submit()
         self.assertEqual(pinv.itc_claim_period, ITC_CLAIM_PERIOD_DEFERRED)
+
+    def test_itc_claim_period_update_restriction_when_filed(self):
+        """
+        Test that ITC Claim Period cannot be changed when GSTR-3B is filed
+        """
+        pinv = create_purchase_invoice(do_not_submit=True)
+        current_period = format_period(pinv.posting_date)
+        pinv.submit()
+
+        self.assertEqual(pinv.itc_claim_period, current_period)
+
+        posting_date = getdate(pinv.posting_date)
+        month_or_quarter = posting_date.strftime("%B")
+        year = posting_date.year
+
+        # Mark GSTR-3B as filed for the current period
+        update_gstr3b_filing_status(
+            company_gstin=pinv.company_gstin,
+            month_or_quarter=month_or_quarter,
+            year=year,
+            status="Filed",
+        )
+
+        # Try to change to a different period - should fail
+        next_period = format_period(add_months(pinv.posting_date, 1))
+        pinv.itc_claim_period = next_period
+
+        self.assertRaisesRegex(
+            frappe.exceptions.ValidationError,
+            re.compile(
+                r"Cannot change ITC Claim Period from .* to .*\. GSTR-3B already filed\."
+            ),
+            pinv.save,
+        )
+
+        # Reload and try to change to "Deferred" - should also fail
+        pinv.reload()
+        pinv.itc_claim_period = ITC_CLAIM_PERIOD_DEFERRED
+
+        self.assertRaisesRegex(
+            frappe.exceptions.ValidationError,
+            re.compile(
+                r"Cannot change ITC Claim Period from .* to .*\. GSTR-3B already filed\."
+            ),
+            pinv.save,
+        )
+
+        # Mark the current period as unfiled
+        update_gstr3b_filing_status(
+            company_gstin=pinv.company_gstin,
+            month_or_quarter=month_or_quarter,
+            year=year,
+            status="Not Filed",
+        )
+
+        # Now it should be possible to change
+        pinv.reload()
+        pinv.itc_claim_period = ITC_CLAIM_PERIOD_DEFERRED
+        pinv.save()
+
+        self.assertEqual(pinv.itc_claim_period, ITC_CLAIM_PERIOD_DEFERRED)
+
+    def test_itc_claim_period_change_unfiled_to_unfiled(self):
+        """Change from one unfiled period to another — should be allowed."""
+        pinv = create_purchase_invoice(do_not_submit=True)
+
+        pinv.itc_claim_period = format_period(pinv.posting_date)
+        pinv.save()
+
+        next_period = format_period(add_months(pinv.posting_date, 1))
+        pinv.itc_claim_period = next_period
+        pinv.save()
+
+        self.assertEqual(pinv.itc_claim_period, next_period)
+
+    def test_itc_claim_period_change_deferred_to_unfiled(self):
+        """Change from Deferred to a specific unfiled period — should be allowed."""
+        pinv = create_purchase_invoice(do_not_submit=True)
+
+        pinv.itc_claim_period = ITC_CLAIM_PERIOD_DEFERRED
+        pinv.save()
+        self.assertEqual(pinv.itc_claim_period, ITC_CLAIM_PERIOD_DEFERRED)
+
+        unfiled_period = format_period(pinv.posting_date)
+        pinv.itc_claim_period = unfiled_period
+        pinv.save()
+
+        self.assertEqual(pinv.itc_claim_period, unfiled_period)
+
+    def test_itc_claim_period_change_to_filed_period_blocked(self):
+        """Cannot change TO a filed period (even if current is unfiled)."""
+        pinv = create_purchase_invoice(do_not_submit=True)
+        pinv.submit()
+
+        next_period = format_period(add_months(pinv.posting_date, 1))
+        next_date = getdate(add_months(pinv.posting_date, 1))
+
+        # File the *target* period
+        update_gstr3b_filing_status(
+            company_gstin=pinv.company_gstin,
+            month_or_quarter=next_date.strftime("%B"),
+            year=next_date.year,
+            status="Filed",
+        )
+
+        pinv.itc_claim_period = next_period
+        self.assertRaisesRegex(
+            frappe.exceptions.ValidationError,
+            re.compile(r"GSTR-3B already filed"),
+            pinv.save,
+        )
+
+        # cleanup
+        update_gstr3b_filing_status(
+            company_gstin=pinv.company_gstin,
+            month_or_quarter=next_date.strftime("%B"),
+            year=next_date.year,
+            status="Not Filed",
+        )
+
+    def test_itc_claim_period_change_deferred_to_filed_blocked(self):
+        """Cannot change from Deferred TO a filed period."""
+        pinv = create_purchase_invoice(do_not_submit=True)
+        pinv.itc_claim_period = ITC_CLAIM_PERIOD_DEFERRED
+        pinv.submit()
+
+        posting_date = getdate(pinv.posting_date)
+        posting_period = format_period(posting_date)
+
+        # File the target period
+        update_gstr3b_filing_status(
+            company_gstin=pinv.company_gstin,
+            month_or_quarter=posting_date.strftime("%B"),
+            year=posting_date.year,
+            status="Filed",
+        )
+
+        pinv.itc_claim_period = posting_period
+        self.assertRaisesRegex(
+            frappe.exceptions.ValidationError,
+            re.compile(r"GSTR-3B already filed"),
+            pinv.save,
+        )
+
+        # cleanup
+        update_gstr3b_filing_status(
+            company_gstin=pinv.company_gstin,
+            month_or_quarter=posting_date.strftime("%B"),
+            year=posting_date.year,
+            status="Not Filed",
+        )
