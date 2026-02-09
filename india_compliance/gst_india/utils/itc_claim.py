@@ -212,7 +212,7 @@ def apply_period_filter(
     return query.where(doc.posting_date[from_date:to_date])
 
 
-def _period_to_date(
+def period_to_date(
     period: str, day: Literal["first", "last"] = "first"
 ) -> datetime.date:
     if not period or len(period) != 6:
@@ -235,7 +235,7 @@ def compare_periods(p1: str, p2: str) -> int:
 
 
 def _next_period(period: str) -> str:
-    return format_period(add_months(_period_to_date(period), 1))
+    return format_period(add_months(period_to_date(period), 1))
 
 
 def _max_period(p1: str, p2: str) -> str:
@@ -502,6 +502,7 @@ def _fetch_inward_supply_data(
 
     if only_linked:
         query = query.where(gstr2.link_name.isnotnull())
+        query = query.where(gstr2.link_name != "")
         query = query.where(gstr2.link_doctype.isin(SUPPORTED_DOCTYPES))
 
     return query.run(as_dict=True)
