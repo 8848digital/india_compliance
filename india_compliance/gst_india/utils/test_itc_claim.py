@@ -16,12 +16,12 @@ from india_compliance.gst_india.utils.itc_claim import (
     _is_gstr3b_filed,
     _max_period,
     _next_period,
+    _period_sort_key,
+    _period_to_date,
     _validate_period_format,
     compare_periods,
     format_period,
     get_itc_period_options,
-    period_sort_key,
-    period_to_date,
     update_gstr3b_filing_status,
 )
 
@@ -33,12 +33,12 @@ class TestITCClaim(IntegrationTestCase):
 
     def test_period_sort_key(self):
         # MMYYYY → YYYYMM conversion
-        self.assertEqual(period_sort_key("012024"), "202401")
-        self.assertEqual(period_sort_key("122023"), "202312")
+        self.assertEqual(_period_sort_key("012024"), "202401")
+        self.assertEqual(_period_sort_key("122023"), "202312")
 
         # ordering
-        self.assertLess(period_sort_key("012024"), period_sort_key("022024"))
-        self.assertLess(period_sort_key("122023"), period_sort_key("012024"))
+        self.assertLess(_period_sort_key("012024"), _period_sort_key("022024"))
+        self.assertLess(_period_sort_key("122023"), _period_sort_key("012024"))
 
     def test_compare_periods(self):
         self.assertEqual(compare_periods("012024", "012024"), 0)
@@ -57,16 +57,16 @@ class TestITCClaim(IntegrationTestCase):
         self.assertEqual(format_period("2024-03-31"), "032024")
 
     def test_period_to_date(self):
-        self.assertEqual(period_to_date("012024"), getdate("2024-01-01"))
-        self.assertEqual(period_to_date("012024", "last"), getdate("2024-01-31"))
+        self.assertEqual(_period_to_date("012024"), getdate("2024-01-01"))
+        self.assertEqual(_period_to_date("012024", "last"), getdate("2024-01-31"))
         # leap year
-        self.assertEqual(period_to_date("022024", "last"), getdate("2024-02-29"))
-        self.assertEqual(period_to_date("022023", "last"), getdate("2023-02-28"))
+        self.assertEqual(_period_to_date("022024", "last"), getdate("2024-02-29"))
+        self.assertEqual(_period_to_date("022023", "last"), getdate("2023-02-28"))
 
     def test_period_to_date_invalid(self):
         for invalid in ("", "12345", "1234567"):
             with self.assertRaises(frappe.exceptions.ValidationError):
-                period_to_date(invalid)
+                _period_to_date(invalid)
 
     def test_next_period(self):
         self.assertEqual(_next_period("012024"), "022024")
@@ -252,7 +252,7 @@ class TestITCClaim(IntegrationTestCase):
         )
 
         self.assertGreater(len(periods), 0)
-        self.assertEqual(periods[0], ITC_CLAIM_PERIOD_DEFERRED)
+        self.assertEqual(periods[-1], ITC_CLAIM_PERIOD_DEFERRED)
 
         # Filed period should be excluded
         month_or_quarter = today.strftime("%B")
