@@ -21,8 +21,8 @@ from india_compliance.gst_india.utils import (
 )
 from india_compliance.gst_india.utils.e_waybill import get_e_waybill_info
 from india_compliance.gst_india.utils.itc_claim import (
-    _validate_itc_claim_period,
     set_or_validate_itc_claim_period,
+    validate_itc_claim_period,
 )
 
 
@@ -80,7 +80,7 @@ def on_update_after_submit(doc, method=None):
     if ignore_gst_validations(doc):
         return
 
-    _validate_itc_claim_period(doc)
+    validate_itc_claim_period(doc)
 
 
 def on_cancel(doc, method=None):
