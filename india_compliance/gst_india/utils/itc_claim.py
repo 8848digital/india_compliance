@@ -223,14 +223,14 @@ def _period_to_date(
     return get_last_day(date) if day == "last" else date
 
 
-def _period_sort_key(period: str) -> str:
+def period_sort_key(period: str) -> str:
     """Convert MMYYYY → YYYYMM for natural string comparison."""
     return period[2:] + period[:2]
 
 
 def compare_periods(p1: str, p2: str) -> int:
     """Compare two MMYYYY periods. Returns -1, 0, or 1."""
-    key1, key2 = _period_sort_key(p1), _period_sort_key(p2)
+    key1, key2 = period_sort_key(p1), period_sort_key(p2)
     return (key1 > key2) - (key1 < key2)
 
 
@@ -239,7 +239,7 @@ def _next_period(period: str) -> str:
 
 
 def _max_period(p1: str, p2: str) -> str:
-    return max(p1, p2, key=_period_sort_key)
+    return max(p1, p2, key=period_sort_key)
 
 
 def _validate_period_format(period: str) -> None:
@@ -373,7 +373,7 @@ def _calculate_itc_claim_period(
     )
 
 
-def _validate_itc_claim_period(doc) -> None:
+def validate_itc_claim_period(doc) -> None:
     validate_mandatory_fields(doc, "itc_claim_period")
     _validate_period_format(doc.itc_claim_period)
     _validate_itc_claim_period_for_rcm_invoice(doc)
@@ -487,21 +487,21 @@ def _fetch_document_data(
 def _fetch_inward_supply_data(
     names: Sequence[str], only_linked: bool = False
 ) -> list[dict]:
-    GSTR2 = frappe.qb.DocType("GST Inward Supply")
+    gstr2 = frappe.qb.DocType("GST Inward Supply")
     query = (
-        frappe.qb.from_(GSTR2)
+        frappe.qb.from_(gstr2)
         .select(
-            GSTR2.name,
-            GSTR2.return_period_2b,
-            GSTR2.ims_action,
-            GSTR2.link_name,
-            GSTR2.link_doctype,
+            gstr2.name,
+            gstr2.return_period_2b,
+            gstr2.ims_action,
+            gstr2.link_name,
+            gstr2.link_doctype,
         )
-        .where(GSTR2.name.isin(names))
+        .where(gstr2.name.isin(names))
     )
 
     if only_linked:
-        query = query.where(GSTR2.link_name.isnotnull())
-        query = query.where(GSTR2.link_doctype.isin(SUPPORTED_DOCTYPES))
+        query = query.where(gstr2.link_name.isnotnull())
+        query = query.where(gstr2.link_doctype.isin(SUPPORTED_DOCTYPES))
 
     return query.run(as_dict=True)

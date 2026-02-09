@@ -15,7 +15,6 @@ from india_compliance.gst_india.overrides.transaction import (
 from india_compliance.gst_india.utils import is_api_enabled, validate_invoice_number
 from india_compliance.gst_india.utils.e_waybill import get_e_waybill_info
 from india_compliance.gst_india.utils.itc_claim import (
-    _is_gstr3b_filed,
     set_or_validate_itc_claim_period,
     validate_itc_claim_period,
 )
