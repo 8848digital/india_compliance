@@ -1255,4 +1255,7 @@ def set_ewaybill_status(
     commit=False,
     notify=True,
 ):
+    if doc.doctype != "Sales Invoice":
+        return
+
     doc.db_set("e_waybill_status", status, commit=commit, notify=notify)
