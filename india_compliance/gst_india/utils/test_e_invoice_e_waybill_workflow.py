@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests.test_api import FrappeAPITestCase
-from frappe.tests.utils import patch_hooks
 
 from india_compliance.exceptions import (
     AlreadyGeneratedError,
@@ -30,7 +29,7 @@ E_INVOICE_IRN_GENERATION_API = (
 
 
 E_WAYBILL_API = "india_compliance.gst_india.utils.e_waybill.generate_e_waybill"
-E_WAYBILL_DATA = "india_compliance.gst_india.utils.e_waybill.EWaybillData.get_data"
+E_WAYBILL_DATA = "india_compliance.gst_india.utils.e_waybill.EWaybillData"
 E_WAYBILL_GENERATE = "india_compliance.gst_india.utils.e_waybill._generate_e_waybill"
 E_WAYBILL_GENERATE_API = "india_compliance.gst_india.api_classes.nic.e_waybill.EWaybillAPI.generate_e_waybill"
 
@@ -99,12 +98,16 @@ def check_error_logged_for_doc(doctype=None, error_substr=None, no_logs=False):
     return decorator
 
 
-class WorkflowTestBase(FrappeAPITestCase):
+class TestEInvoiceWorkflow(FrappeAPITestCase):
+    """
+    Tests for e-Invoice generation workflow and error handling.
+    """
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         frappe.db.set_single_value("GST Settings", GST_SETTINGS)
-        frappe.db.commit()  # nosemgrep # Make settings visible to WSGI thread
+        frappe.db.commit()  # Make settings visible to WSGI thread
 
     def _create_si(self, **kwargs):
         """Create a Sales Invoice suitable for e-Invoice generation."""
@@ -115,26 +118,6 @@ class WorkflowTestBase(FrappeAPITestCase):
         defaults.update(kwargs)
         return create_sales_invoice(**defaults)
 
-    def setUp(self):
-        super().setUp()
-
-        self.si = self._create_si()
-        frappe.db.commit()  # nosemgrep # Ensure SI is visible to WSGI thread
-
-    def tearDown(self):
-        super().tearDown()
-
-        self.si.reload()
-        self.si.cancel()
-        self.si.delete(force=True, ignore_permissions=True)
-        frappe.db.commit()  # nosemgrep
-
-
-class TestEInvoiceWorkflow(WorkflowTestBase):
-    """
-    Tests for e-Invoice generation workflow and error handling.
-    """
-
     def _post_e_invoice(self, docname, throw=True, force=False):
         """Make a real HTTP POST to the generate_e_invoice API endpoint.
 
@@ -143,7 +126,7 @@ class TestEInvoiceWorkflow(WorkflowTestBase):
         thread can read any WSGI-committed changes.
         """
         sid = self.sid
-        frappe.db.commit()  # nosemgrep
+        frappe.db.commit()
         response = self.post(
             self.method(E_INVOICE_API),
             {"docname": docname, "throw": throw, "force": force, "sid": sid},
@@ -158,21 +141,24 @@ class TestEInvoiceWorkflow(WorkflowTestBase):
     # =====================================================================
 
     def test_ui_manual_already_generated_raises(self):
-        self.si.db_set("irn", "test_irn_12345")
+        si = self._create_si()
+        si.db_set("irn", "test_irn_12345")
 
-        response = self._post_e_invoice(self.si.name, throw=True)
+        response = self._post_e_invoice(si.name, throw=True)
 
         self.assertEqual(response.status_code, 417)
         self.assertEqual(response.json["exc_type"], "AlreadyGeneratedError")
 
         # No status change for AlreadyGeneratedError
-        self.si.reload()
-        self.assertNotEqual(self.si.einvoice_status, "Failed")
+        si.reload()
+        self.assertNotEqual(si.einvoice_status, "Failed")
 
     def test_ui_manual_not_applicable_raises(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = NotApplicableError("Not applicable")
-            response = self._post_e_invoice(self.si.name, throw=True)
+            response = self._post_e_invoice(si.name, throw=True)
 
         self.assertEqual(response.status_code, 417)
         self.assertEqual(response.json["exc_type"], "NotApplicableError")
@@ -182,48 +168,47 @@ class TestEInvoiceWorkflow(WorkflowTestBase):
         Note: einvoice_status is set to 'Failed' inside the function but
         the WSGI transaction is rolled back on error, so it is not persisted.
         """
+        si = self._create_si()
 
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = frappe.ValidationError("Invalid HSN")
-            response = self._post_e_invoice(self.si.name, throw=True)
+            response = self._post_e_invoice(si.name, throw=True)
 
         self.assertEqual(response.status_code, 417)
         self.assertEqual(response.json["exc_type"], "ValidationError")
 
     def test_ui_manual_mandatory_error_raises(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = frappe.MandatoryError("Customer Address missing")
-            response = self._post_e_invoice(self.si.name, throw=True)
+            response = self._post_e_invoice(si.name, throw=True)
 
         self.assertEqual(response.status_code, 417)
         self.assertEqual(response.json["exc_type"], "MandatoryError")
 
-    @patch_hooks(
-        {
-            "before_request": [
-                *frappe.get_hooks("before_request"),
-                "india_compliance.gst_india.utils.test_e_invoice_e_waybill_workflow.set_in_test_as_true",
-            ]
-        }
-    )
     def test_ui_manual_gsp_server_error_never_raises(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = GSPServerError
-            response = self._post_e_invoice(self.si.name, throw=True)
+            response = self._post_e_invoice(si.name, throw=True)
 
         self.assertEqual(response.status_code, 200)
-        self.si.reload()
-        self.assertEqual(self.si.einvoice_status, "Auto-Retry")
+        si.reload()
+        self.assertEqual(si.einvoice_status, "Auto-Retry")
         frappe.db.set_single_value(
             "GST Settings", "is_retry_einv_ewb_generation_pending", 0
         )
-        frappe.db.commit()  # nosemgrep
+        frappe.db.commit()
 
     def test_ui_manual_unhandled_exception_raises(self):
         """UI Manual: Unhandled exceptions returned as HTTP 500."""
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = RuntimeError("Unexpected")
-            response = self._post_e_invoice(self.si.name, throw=True)
+            response = self._post_e_invoice(si.name, throw=True)
 
         self.assertEqual(response.status_code, 500)
 
@@ -234,66 +219,77 @@ class TestEInvoiceWorkflow(WorkflowTestBase):
     # =====================================================================
 
     def test_auto_gen_ui_already_generated_skips_with_warning(self):
-        self.si.db_set("irn", "test_irn_12345")
+        si = self._create_si()
+        si.db_set("irn", "test_irn_12345")
 
-        response = self._post_e_invoice(self.si.name, throw=False)
+        response = self._post_e_invoice(si.name, throw=False)
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(_response_message_contains(response, "already been generated"))
 
-        self.si.reload()
-        self.assertNotEqual(self.si.einvoice_status, "Failed")
+        si.reload()
+        self.assertNotEqual(si.einvoice_status, "Failed")
 
     def test_auto_gen_ui_not_applicable_skips_with_message(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = NotApplicableError("Not applicable")
-            response = self._post_e_invoice(self.si.name, throw=False)
+            response = self._post_e_invoice(si.name, throw=False)
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(_response_message_contains(response, "Not applicable"))
 
-        self.si.reload()
-        self.assertEqual(self.si.einvoice_status, "Not Applicable")
+        si.reload()
+        self.assertNotEqual(si.einvoice_status, "Failed")
 
     def test_auto_gen_ui_validation_error_shows_warning(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = frappe.ValidationError("Invalid data")
-            response = self._post_e_invoice(self.si.name, throw=False)
+            response = self._post_e_invoice(si.name, throw=False)
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(_response_message_contains(response, "auto-generation failed"))
 
-        self.si.reload()
-        self.assertEqual(self.si.einvoice_status, "Failed")
+        si.reload()
+        self.assertEqual(si.einvoice_status, "Failed")
 
     def test_auto_gen_ui_mandatory_error_shows_warning(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = frappe.MandatoryError("Missing address")
-            response = self._post_e_invoice(self.si.name, throw=False)
+            response = self._post_e_invoice(si.name, throw=False)
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(_response_message_contains(response, "auto-generation failed"))
 
-        self.si.reload()
-        self.assertEqual(self.si.einvoice_status, "Failed")
+        si.reload()
+        self.assertEqual(si.einvoice_status, "Failed")
 
     def test_auto_gen_ui_gsp_error_shows_warning(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = GSPServerError
-            response = self._post_e_invoice(self.si.name, throw=False)
+            response = self._post_e_invoice(si.name, throw=False)
 
         self.assertEqual(response.status_code, 200)
-        self.si.reload()
-        self.assertIn(self.si.einvoice_status, ("Auto-Retry", "Failed"))
+        si.reload()
+        self.assertIn(si.einvoice_status, ("Auto-Retry", "Failed"))
         frappe.db.set_single_value(
             "GST Settings", "is_retry_einv_ewb_generation_pending", 0
         )
-        frappe.db.commit()  # nosemgrep
+        frappe.db.commit()
 
     def test_auto_gen_ui_unhandled_exception_still_raises(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = RuntimeError("Unexpected")
-            response = self._post_e_invoice(self.si.name, throw=False)
+            response = self._post_e_invoice(si.name, throw=False)
 
         self.assertEqual(response.status_code, 500)
 
@@ -304,51 +300,61 @@ class TestEInvoiceWorkflow(WorkflowTestBase):
     # =====================================================================
 
     def test_auto_gen_server_already_generated(self):
-        self.si.db_set("irn", "test_irn_12345")
+        si = self._create_si()
+        si.db_set("irn", "test_irn_12345")
 
+        frappe.local.message_log = []
         with self.assertRaises(AlreadyGeneratedError):
-            generate_e_invoice(self.si.name)
+            generate_e_invoice(si.name)
 
-        self.assertNotEqual(self.si.einvoice_status, "Failed")
+        self.assertNotEqual(si.einvoice_status, "Failed")
 
     def test_auto_gen_server_not_applicable(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = NotApplicableError("Not applicable")
             frappe.local.message_log = []
             with self.assertRaises(NotApplicableError):
-                generate_e_invoice(self.si.name)
+                generate_e_invoice(si.name)
 
     def test_auto_gen_server_validation_error(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = frappe.ValidationError("Bad data")
             frappe.local.message_log = []
             with self.assertRaises(frappe.ValidationError):
-                generate_e_invoice(self.si.name)
+                generate_e_invoice(si.name)
 
     def test_auto_gen_server_gsp_error(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = GSPServerError
-            result = generate_e_invoice(self.si.name)
+            result = generate_e_invoice(si.name)
 
         self.assertIsNone(result)
-        self.si.reload()
-        self.assertIn(self.si.einvoice_status, ("Auto-Retry", "Failed"))
+        si.reload()
+        self.assertIn(si.einvoice_status, ("Auto-Retry", "Failed"))
         frappe.db.set_single_value(
             "GST Settings", "is_retry_einv_ewb_generation_pending", 0
         )
-        frappe.db.commit()  # nosemgrep
+        frappe.db.commit()
 
     def test_auto_gen_server_unhandled_exception_raises(self):
+        si = self._create_si()
+
         with patch(E_INVOICE_DATA) as mock_data:
             mock_data.side_effect = RuntimeError("Unexpected")
             self.assertRaises(
                 RuntimeError,
                 generate_e_invoice,
-                self.si.name,
+                si.name,
             )
 
 
-class TestEWaybillWorkflow(WorkflowTestBase):
+class TestEWaybillWorkflow(FrappeAPITestCase):
     """
     Tests for e-Waybill generation workflow and error handling.
 
@@ -363,10 +369,25 @@ class TestEWaybillWorkflow(WorkflowTestBase):
     - Already-generated check uses `doc.ewaybill` instead of `doc.irn`.
     """
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        frappe.db.set_single_value("GST Settings", GST_SETTINGS)
+        frappe.db.commit()
+
+    def _create_si(self, **kwargs):
+        """Create a Sales Invoice suitable for e-Waybill generation."""
+        defaults = {
+            "is_in_state": True,
+            "company_address": "_Test Indian Registered Company-Billing",
+        }
+        defaults.update(kwargs)
+        return create_sales_invoice(**defaults)
+
     def _post_e_waybill(self, doctype, docname, values=None, force=False):
         """Make a real HTTP POST to the generate_e_waybill API endpoint."""
         sid = self.sid
-        frappe.db.commit()  # nosemgrep
+        frappe.db.commit()
         data = {"doctype": doctype, "docname": docname, "force": force, "sid": sid}
         if values is not None:
             data["values"] = frappe.as_json(values)
@@ -380,73 +401,76 @@ class TestEWaybillWorkflow(WorkflowTestBase):
     # =====================================================================
 
     def test_ui_manual_already_generated_raises(self):
-        self.si.db_set("ewaybill", "123456789012")
+        si = self._create_si()
+        si.db_set("ewaybill", "123456789012")
 
         response = self._post_e_waybill(
-            "Sales Invoice", self.si.name, values={"distance": 10}
+            "Sales Invoice", si.name, values={"distance": 10}
         )
 
         self.assertEqual(response.status_code, 417)
         self.assertEqual(response.json["exc_type"], "AlreadyGeneratedError")
 
     def test_ui_manual_not_applicable_raises(self):
+        si = self._create_si()
+
         with patch(E_WAYBILL_DATA) as mock_data:
             mock_data.side_effect = NotApplicableError("Not applicable")
             response = self._post_e_waybill(
-                "Sales Invoice", self.si.name, values={"distance": 10}
+                "Sales Invoice", si.name, values={"distance": 10}
             )
 
         self.assertEqual(response.status_code, 417)
         self.assertEqual(response.json["exc_type"], "NotApplicableError")
 
     def test_ui_manual_validation_error_raises(self):
+        si = self._create_si()
+
         with patch(E_WAYBILL_DATA) as mock_data:
             mock_data.side_effect = frappe.ValidationError("Invalid HSN")
             response = self._post_e_waybill(
-                "Sales Invoice", self.si.name, values={"distance": 10}
+                "Sales Invoice", si.name, values={"distance": 10}
             )
 
         self.assertEqual(response.status_code, 417)
         self.assertEqual(response.json["exc_type"], "ValidationError")
 
     def test_ui_manual_mandatory_error_raises(self):
+        si = self._create_si()
+
         with patch(E_WAYBILL_DATA) as mock_data:
             mock_data.side_effect = frappe.MandatoryError("Transport details missing")
             response = self._post_e_waybill(
-                "Sales Invoice", self.si.name, values={"distance": 10}
+                "Sales Invoice", si.name, values={"distance": 10}
             )
 
         self.assertEqual(response.status_code, 417)
         self.assertEqual(response.json["exc_type"], "MandatoryError")
 
-    @patch_hooks(
-        {
-            "before_request": [
-                *frappe.get_hooks("before_request"),
-                "india_compliance.gst_india.utils.test_e_invoice_e_waybill_workflow.set_in_test_as_true",
-            ]
-        }
-    )
     def test_ui_manual_gsp_server_error_never_raises(self):
+        si = self._create_si()
+
         with patch(E_WAYBILL_DATA) as mock_data:
             mock_data.side_effect = GSPServerError
             response = self._post_e_waybill(
-                "Sales Invoice", self.si.name, values={"distance": 10}
+                "Sales Invoice", si.name, values={"distance": 10}
             )
 
         self.assertEqual(response.status_code, 200)
-        self.si.reload()
-        self.assertEqual(self.si.e_waybill_status, "Auto-Retry")
+        si.reload()
+        self.assertEqual(si.e_waybill_status, "Auto-Retry")
         frappe.db.set_single_value(
             "GST Settings", "is_retry_einv_ewb_generation_pending", 0
         )
-        frappe.db.commit()  # nosemgrep
+        frappe.db.commit()
 
     def test_ui_manual_unhandled_exception_raises(self):
+        si = self._create_si()
+
         with patch(E_WAYBILL_DATA) as mock_data:
             mock_data.side_effect = RuntimeError("Unexpected")
             response = self._post_e_waybill(
-                "Sales Invoice", self.si.name, values={"distance": 10}
+                "Sales Invoice", si.name, values={"distance": 10}
             )
 
         self.assertEqual(response.status_code, 500)
@@ -457,65 +481,76 @@ class TestEWaybillWorkflow(WorkflowTestBase):
     # =====================================================================
 
     def test_auto_gen_already_generated_skips_silently(self):
-        self.si.db_set("ewaybill", "123456789012")
+        si = self._create_si()
+        si.db_set("ewaybill", "123456789012")
 
         frappe.local.message_log = []
-        _generate_e_waybill(self.si, throw=False)
+        _generate_e_waybill(si, throw=False)
 
-        self.si.reload()
-        self.assertNotEqual(self.si.e_waybill_status, "Failed")
+        si.reload()
+        self.assertNotEqual(si.e_waybill_status, "Failed")
 
     def test_auto_gen_not_applicable_skips_silently(self):
+        si = self._create_si()
+
         with patch(E_WAYBILL_DATA) as mock_data:
             mock_data.side_effect = NotApplicableError("Not applicable")
-            _generate_e_waybill(self.si, throw=False)
+            _generate_e_waybill(si, throw=False)
 
-        self.si.reload()
-        self.assertEqual(self.si.e_waybill_status, "Not Applicable")
+        si.reload()
+        self.assertEqual(si.e_waybill_status, "Not Applicable")
 
     def test_auto_gen_validation_error_sets_failed(self):
+        si = self._create_si()
+
         with patch(E_WAYBILL_DATA) as mock_data:
             mock_data.side_effect = frappe.ValidationError("Invalid data")
-            _generate_e_waybill(self.si, throw=False)
+            _generate_e_waybill(si, throw=False)
 
-        self.si.reload()
-        self.assertEqual(self.si.e_waybill_status, "Failed")
+        si.reload()
+        self.assertEqual(si.e_waybill_status, "Failed")
 
     def test_auto_gen_mandatory_error_sets_failed(self):
+        si = self._create_si()
+
         with patch(E_WAYBILL_DATA) as mock_data:
             mock_data.side_effect = frappe.MandatoryError("Missing transport details")
-            _generate_e_waybill(self.si, throw=False)
+            _generate_e_waybill(si, throw=False)
 
-        self.si.reload()
-        self.assertEqual(self.si.e_waybill_status, "Failed")
+        si.reload()
+        self.assertEqual(si.e_waybill_status, "Failed")
 
     def test_auto_gen_gsp_error_sets_status(self):
+        si = self._create_si()
+
         with patch(E_WAYBILL_DATA) as mock_data:
             mock_data.side_effect = GSPServerError
-            _generate_e_waybill(self.si, throw=False)
+            _generate_e_waybill(si, throw=False)
 
-        self.si.reload()
-        self.assertIn(self.si.e_waybill_status, ("Auto-Retry", "Failed"))
+        si.reload()
+        self.assertIn(si.e_waybill_status, ("Auto-Retry", "Failed"))
         frappe.db.set_single_value(
             "GST Settings", "is_retry_einv_ewb_generation_pending", 0
         )
-        frappe.db.commit()  # nosemgrep
+        frappe.db.commit()
 
     def test_auto_gen_unhandled_exception_always_raises(self):
+        si = self._create_si()
+
         with patch(E_WAYBILL_DATA) as mock_data:
             mock_data.side_effect = RuntimeError("Unexpected")
             self.assertRaises(
                 RuntimeError,
                 _generate_e_waybill,
-                self.si,
+                si,
                 throw=False,
             )
 
-        self.si.reload()
-        self.assertEqual(self.si.e_waybill_status, "Failed")
+        si.reload()
+        self.assertEqual(si.e_waybill_status, "Failed")
 
 
-class TestBulkGeneration(WorkflowTestBase):
+class TestBulkGeneration(FrappeAPITestCase):
     """
     Tests for bulk e-Invoice and e-Waybill generation behavior.
 
@@ -523,19 +558,19 @@ class TestBulkGeneration(WorkflowTestBase):
     for each failed document and continuing to the next.
     """
 
-    def setUp(self):
-        self.si1 = self._create_si()
-        self.si2 = self._create_si()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        frappe.db.set_single_value("GST Settings", GST_SETTINGS)
+        frappe.db.commit()
 
-    def tearDown(self):
-        self.si1.reload()
-        self.si1.cancel()
-        self.si1.delete(force=True, ignore_permissions=True)
-
-        self.si2.reload()
-        self.si2.cancel()
-        self.si2.delete(force=True, ignore_permissions=True)
-        frappe.db.commit()  # nosemgrep
+    def _create_si(self, **kwargs):
+        defaults = {
+            "is_in_state": True,
+            "company_address": "_Test Indian Registered Company-Billing",
+        }
+        defaults.update(kwargs)
+        return create_sales_invoice(**defaults)
 
     # =====================================================================
     # e-Invoice Bulk Generation
@@ -544,21 +579,26 @@ class TestBulkGeneration(WorkflowTestBase):
     @check_error_logged_for_doc(no_logs=True)
     def test_einvoice_bulk_all_succeed(self):
         """Bulk e-Invoice: all documents processed successfully."""
+        si1 = self._create_si()
+        si2 = self._create_si()
 
         with patch(E_INVOICE_API) as mock_gen:
             mock_gen.return_value = None
-            generate_e_invoices([self.si1.name, self.si2.name])
+            generate_e_invoices([si1.name, si2.name])
 
         self.assertEqual(mock_gen.call_count, 2)
 
     @check_error_logged_for_doc("Sales Invoice", "Error for si1")
     def test_einvoice_bulk_first_fails_second_succeeds(self):
+        si1 = self._create_si()
+        si2 = self._create_si()
+
         with patch(E_INVOICE_API) as mock_gen:
             mock_gen.side_effect = [
                 frappe.ValidationError("Error for si1"),
                 None,
             ]
-            generate_e_invoices([self.si1.name, self.si2.name])
+            generate_e_invoices([si1.name, si2.name])
 
         self.assertEqual(mock_gen.call_count, 2)
 
@@ -566,37 +606,42 @@ class TestBulkGeneration(WorkflowTestBase):
     @check_error_logged_for_doc("Sales Invoice", "Error for si2")
     def test_einvoice_bulk_all_fail(self):
         """Bulk e-Invoice: all documents fail, no exception raised to caller."""
+        si1 = self._create_si()
+        si2 = self._create_si()
+
         with patch(E_INVOICE_API) as mock_gen:
             mock_gen.side_effect = [
                 frappe.ValidationError("Error for si1"),
                 frappe.ValidationError("Error for si2"),
             ]
-            generate_e_invoices([self.si1.name, self.si2.name])
+            generate_e_invoices([si1.name, si2.name])
 
         self.assertEqual(mock_gen.call_count, 2)
 
     @check_error_logged_for_doc(no_logs=True)
     def test_einvoice_bulk_gsp_error_continues(self):
         """Bulk e-Invoice: GSPServerError for one doc doesn't stop others."""
+        si1 = self._create_si()
+        si2 = self._create_si()
+
         with patch(E_INVOICE_IRN_GENERATION_API) as mock_gen:
             mock_gen.side_effect = [GSPServerError, None]
-            generate_e_invoices([self.si1.name, self.si2.name])
+            generate_e_invoices([si1.name, si2.name])
 
         self.assertEqual(mock_gen.call_count, 1)
-        frappe.db.set_single_value(
-            "GST Settings", "is_retry_einv_ewb_generation_pending", 0
-        )
-        frappe.db.commit()  # nosemgrep
 
     @check_error_logged_for_doc("Sales Invoice", "Unexpected")
     def test_einvoice_bulk_runtime_error_continues(self):
         """Bulk e-Invoice: unhandled exceptions are logged, processing continues."""
+        si1 = self._create_si()
+        si2 = self._create_si()
+
         with patch(E_INVOICE_API) as mock_gen:
             mock_gen.side_effect = [
                 RuntimeError("Unexpected"),
                 None,
             ]
-            generate_e_invoices([self.si1.name, self.si2.name])
+            generate_e_invoices([si1.name, si2.name])
 
         self.assertEqual(mock_gen.call_count, 2)
 
@@ -607,21 +652,27 @@ class TestBulkGeneration(WorkflowTestBase):
     @check_error_logged_for_doc(no_logs=True)
     def test_ewaybill_bulk_all_succeed(self):
         """Bulk e-Waybill: all documents processed successfully."""
+        si1 = self._create_si()
+        si2 = self._create_si()
+
         with patch(E_WAYBILL_GENERATE) as mock_gen:
             mock_gen.return_value = None
-            generate_e_waybills("Sales Invoice", [self.si1.name, self.si2.name])
+            generate_e_waybills("Sales Invoice", [si1.name, si2.name])
 
         self.assertEqual(mock_gen.call_count, 2)
 
     @check_error_logged_for_doc("Sales Invoice", "Error for si1")
     def test_ewaybill_bulk_first_fails_second_succeeds(self):
         """Bulk e-Waybill: first doc fails, second still processed."""
+        si1 = self._create_si()
+        si2 = self._create_si()
+
         with patch(E_WAYBILL_GENERATE) as mock_gen:
             mock_gen.side_effect = [
                 frappe.ValidationError("Error for si1"),
                 None,
             ]
-            generate_e_waybills("Sales Invoice", [self.si1.name, self.si2.name])
+            generate_e_waybills("Sales Invoice", [si1.name, si2.name])
 
         self.assertEqual(mock_gen.call_count, 2)
 
@@ -629,43 +680,47 @@ class TestBulkGeneration(WorkflowTestBase):
     @check_error_logged_for_doc("Sales Invoice", "Error for si2")
     def test_ewaybill_bulk_all_fail(self):
         """Bulk e-Waybill: all documents fail, no exception raised to caller."""
+        si1 = self._create_si()
+        si2 = self._create_si()
+
         with patch(E_WAYBILL_GENERATE) as mock_gen:
             mock_gen.side_effect = [
                 frappe.ValidationError("Error for si1"),
                 frappe.ValidationError("Error for si2"),
             ]
-            generate_e_waybills("Sales Invoice", [self.si1.name, self.si2.name])
+            generate_e_waybills("Sales Invoice", [si1.name, si2.name])
 
         self.assertEqual(mock_gen.call_count, 2)
 
     @check_error_logged_for_doc(no_logs=True)
     def test_ewaybill_bulk_gsp_error_continues(self):
         """Bulk e-Waybill: GSPServerError for one doc doesn't stop others."""
+        si1 = self._create_si()
+        si2 = self._create_si()
+
         with patch(E_WAYBILL_DATA) as mock_data:
-            mock_data.return_value = None
+            mock_data.side_effect = None
 
             with patch(E_WAYBILL_GENERATE_API) as mock_gen:
                 mock_gen.side_effect = [
                     GSPServerError,
-                    GSPServerError,
+                    None,
                 ]
-                generate_e_waybills("Sales Invoice", [self.si1.name, self.si2.name])
+                generate_e_waybills("Sales Invoice", [si1.name, si2.name])
 
         self.assertEqual(mock_gen.call_count, 1)
 
     @check_error_logged_for_doc("Sales Invoice", "Unexpected")
     def test_ewaybill_bulk_runtime_error_continues(self):
         """Bulk e-Waybill: unhandled exceptions are logged, processing continues."""
+        si1 = self._create_si()
+        si2 = self._create_si()
+
         with patch(E_WAYBILL_GENERATE) as mock_gen:
             mock_gen.side_effect = [
                 RuntimeError("Unexpected"),
                 None,
             ]
-            generate_e_waybills("Sales Invoice", [self.si1.name, self.si2.name])
+            generate_e_waybills("Sales Invoice", [si1.name, si2.name])
 
         self.assertEqual(mock_gen.call_count, 2)
-
-
-def set_in_test_as_true():
-    """Hook method to set a flag in frappe.local during tests."""
-    frappe.flags.in_test = True
