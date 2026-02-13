@@ -117,7 +117,7 @@
   }
  ],
  "links": [],
- "modified": "2026-02-13 20:43:36.278214",
+ "modified": "2026-02-13 19:43:36.278214",
  "modified_by": "Administrator",
  "module": "GST India",
  "name": "GSTR 3B Report",
@@ -143,8 +143,12 @@
    "write": 1
   }
  ],
+<<<<<<< HEAD
+ "sort_field": "modified",
+=======
  "row_format": "Dynamic",
  "sort_field": "creation",
+>>>>>>> ba57cf82 (fix: add 'set_only_once' property to fields in GSTR 3B Report)
  "sort_order": "DESC",
  "states": [],
  "track_changes": 1
