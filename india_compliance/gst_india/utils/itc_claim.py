@@ -314,21 +314,6 @@ def _get_next_unfiled_period(
     return None
 
 
-def _sync_gstr3b_report_status(
-    gstin: str, month_or_quarter: str, year: str, status: str
-) -> None:
-    frappe.db.set_value(
-        "GSTR 3B Report",
-        {
-            "company_gstin": gstin,
-            "month_or_quarter": month_or_quarter,
-            "year": year,
-        },
-        "filing_status",
-        status,
-    )
-
-
 # =============================================================================
 # ITC Calculation
 # =============================================================================
