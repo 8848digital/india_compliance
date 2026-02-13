@@ -68,6 +68,15 @@
    "read_only": 1
   },
   {
+   "default": "Not Filed",
+   "fieldname": "filing_status",
+   "fieldtype": "Select",
+   "is_virtual": 1,
+   "label": "Filing Status",
+   "options": "Not Filed\nFiled",
+   "read_only": 1
+  },
+  {
    "fieldname": "company_gstin",
    "fieldtype": "Autocomplete",
    "label": "Company GSTIN",
