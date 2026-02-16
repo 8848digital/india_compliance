@@ -3,11 +3,7 @@ from frappe import _
 from frappe.model.meta import get_field_precision
 from frappe.utils import flt
 
-from india_compliance.gst_india.constants import (
-    GST_TAX_TYPES,
-    IMPORT_GST_CATEGORIES,
-    VALID_HSN_LENGTHS,
-)
+from india_compliance.gst_india.constants import GST_TAX_TYPES, VALID_HSN_LENGTHS
 from india_compliance.gst_india.overrides.sales_invoice import (
     update_dashboard_with_gst_logs,
 )

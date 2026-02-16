@@ -1485,4 +1485,3 @@ ORIGINAL_VS_AMENDED = (
 E_INVOICE_MASTER_CODES_URL = "https://einvoice1.gst.gov.in/Others/MasterCodes"
 
 VALID_HSN_LENGTHS = (4, 6, 8)
-SERVICE_HSN_PREFIX = "99"
