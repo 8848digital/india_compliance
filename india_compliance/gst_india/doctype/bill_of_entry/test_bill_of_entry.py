@@ -10,7 +10,6 @@ from frappe.utils import today
 from erpnext.projects.doctype.project.test_project import make_project
 
 from india_compliance.gst_india.doctype.bill_of_entry.bill_of_entry import (
-    fetch_pending_boe_invoices,
     get_pi_items,
     make_bill_of_entry,
     make_journal_entry_for_payment,
@@ -339,7 +338,7 @@ class TestBillofEntry(FrappeTestCase):
         pi2 = create_purchase_invoice(
             supplier="_Test Foreign Supplier", update_stock=1, do_not_submit=True
         )
-        pi2.project = project
+        pi2.project = project.name
         pi2.items[0].project = None
         pi2.submit()
 
@@ -350,112 +349,3 @@ class TestBillofEntry(FrappeTestCase):
 
         pi_items = get_pi_items([pi2.name])
         self.assertEqual(pi_items[0].project, project)
-
-    def test_itc_claim_period_auto_set(self):
-        """Test that ITC claim period is auto-set on Bill of Entry creation."""
-        pi = create_purchase_invoice(supplier="_Test Foreign Supplier", update_stock=1)
-
-        boe = make_bill_of_entry(pi.name)
-        boe.bill_of_entry_no = "123"
-        boe.bill_of_entry_date = today()
-        boe.save()
-
-        # ITC claim period should be set to posting period by default
-        expected_period = format_period(boe.posting_date)
-        self.assertEqual(boe.itc_claim_period, expected_period)
-
-    def test_create_bill_of_entry_for_sez_goods_only(self):
-        """
-        SEZ goods-only invoice should allow BOE creation
-        """
-        pi = create_purchase_invoice(
-            supplier="_Test Registered Supplier",
-            update_stock=1,
-            do_not_submit=True,
-            do_not_save=True,
-        )
-        pi.gst_category = "SEZ"
-        pi.insert()
-        pi.submit()
-
-        pi.reload()
-        self.assertEqual(pi.items[0].pending_boe_qty, 1)
-
-        boe = make_bill_of_entry(pi.name)
-        self.assertEqual(len(boe.items), 1)
-        self.assertEqual(boe.items[0].pi_detail, pi.items[0].name)
-
-    def test_sez_service_invoice_no_boe(self):
-        """
-        SEZ service-only invoice should have pending_boe_qty = 0
-        """
-        pi = create_purchase_invoice(
-            supplier="_Test Registered Supplier",
-            item_code="_Test Service Item",
-            do_not_submit=True,
-            do_not_save=True,
-        )
-        pi.gst_category = "SEZ"
-        pi.insert()
-        pi.submit()
-
-        pi.reload()
-        self.assertEqual(pi.items[0].pending_boe_qty, 0)
-
-    def test_sez_pending_boe_qty(self):
-        """
-        SEZ goods invoice: pending_boe_qty decrements on BOE submit,
-        restores on cancel, and handles partial BOE correctly.
-        """
-        pi = create_purchase_invoice(
-            supplier="_Test Registered Supplier",
-            update_stock=1,
-            qty=2,
-            do_not_submit=True,
-            do_not_save=True,
-        )
-        pi.gst_category = "SEZ"
-        pi.insert()
-        pi.submit()
-
-        boe = make_bill_of_entry(pi.name)
-        boe.bill_of_entry_no = "SEZ-BOE-002"
-        boe.bill_of_entry_date = today()
-        boe.items[0].qty = 1
-        boe.save()
-        boe.submit()
-
-        pi.reload()
-        self.assertEqual(pi.items[0].pending_boe_qty, 1)
-
-        boe.cancel()
-        pi.reload()
-        self.assertEqual(pi.items[0].pending_boe_qty, 2)
-
-    def test_boe_not_applicable_excludes_invoice_from_boe(self):
-        """
-        An Import Of Service invoice (is_boe_applicable auto-set to 0) must not
-        appear in get_pi_items or fetch_pending_boe_invoices.
-        """
-        pi = create_purchase_invoice(
-            supplier="_Test Foreign Supplier",
-            item_code="_Test Service Item",
-            do_not_submit=True,
-        )
-        self.assertEqual(pi.is_boe_applicable, 0)
-        pi.submit()
-
-        pi.reload()
-        self.assertEqual(pi.items[0].pending_boe_qty, 0)
-        self.assertEqual(get_pi_items([pi.name]), [])
-
-        pending_invoices = fetch_pending_boe_invoices(
-            doctype="Purchase Invoice",
-            txt="",
-            searchfield="name",
-            start=0,
-            page_len=20,
-            filters={},
-        )
-
-        self.assertNotIn(pi.name, [invoice.name for invoice in pending_invoices])

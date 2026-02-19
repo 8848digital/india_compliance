@@ -792,9 +792,6 @@ def get_pi_items(purchase_invoices):
     pi_item = frappe.qb.DocType("Purchase Invoice Item")
     pi = frappe.qb.DocType("Purchase Invoice")
 
-    if not purchase_invoices:
-        purchase_invoices.append("")
-
     return (
         frappe.qb.from_(pi_item)
         .join(pi)
