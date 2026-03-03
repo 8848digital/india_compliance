@@ -117,7 +117,7 @@ jobs:
               if: ${{ always() }}
               run: cat ~/frappe-bench/bench_start.log || true
 
-            - name: Upload coverage data
+
               uses: actions/upload-artifact@v7
               with:
                 name: coverage
