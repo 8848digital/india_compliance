@@ -20,7 +20,10 @@ frappe.ui.form.on(DOCTYPE, {
         india_compliance.setup_itc_claim_period_query(frm);
     },
 
-    onload: toggle_reverse_charge,
+    onload(frm) {
+        toggle_reverse_charge(frm);
+        frm.set_df_property("itc_claim_period", "ignore_validation", 1);
+    },
 
     gst_category(frm) {
         validate_gst_hsn_code(frm);
