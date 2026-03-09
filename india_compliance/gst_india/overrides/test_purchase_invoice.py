@@ -327,7 +327,7 @@ class TestPurchaseInvoice(FrappeTestCase):
         self.assertRaisesRegex(
             frappe.exceptions.ValidationError,
             re.compile(
-                r"Cannot change ITC Claim Period from .* to .*\. GSTR-3B already filed\."
+                r"Cannot change ITC Claim Period from .* to .*\. GSTR-3B already filed for .*\."
             ),
             pinv.save,
         )
@@ -339,7 +339,7 @@ class TestPurchaseInvoice(FrappeTestCase):
         self.assertRaisesRegex(
             frappe.exceptions.ValidationError,
             re.compile(
-                r"Cannot change ITC Claim Period from .* to .*\. GSTR-3B already filed\."
+                r"Cannot change ITC Claim Period from .* to .*\. GSTR-3B already filed for .*\."
             ),
             pinv.save,
         )
