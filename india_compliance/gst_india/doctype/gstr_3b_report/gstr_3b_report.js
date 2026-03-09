@@ -27,7 +27,7 @@ frappe.ui.form.on("GSTR 3B Report", {
         const is_filed = frm.doc.filing_status === "Filed";
         frm.page.set_indicator(
             is_filed ? __("Filed") : __("Not Filed"),
-            is_filed ? "green" : "orange",
+            is_filed ? "green" : "orange"
         );
 
         frm.set_intro(__("Please save the report again to rebuild or update"));
