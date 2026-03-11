@@ -26,6 +26,9 @@ from india_compliance.gst_india.utils import (
     get_period,
 )
 from india_compliance.gst_india.utils.exporter import ExcelExporter
+from india_compliance.gst_india.utils.itc_claim import (
+    apply_period_filter as _apply_itc_period_filter,
+)
 
 VALUES_TO_UPDATE = ["iamt", "camt", "samt", "csamt"]
 GST_TAX_TYPE_MAP = {
