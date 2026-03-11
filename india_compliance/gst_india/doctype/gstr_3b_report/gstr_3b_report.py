@@ -31,10 +31,6 @@ from india_compliance.gst_india.utils import (
     get_period,
 )
 from india_compliance.gst_india.utils.exporter import ExcelExporter
-
-from india_compliance.gst_india.utils.gstr_1.gstr_1_data import GSTR11A11BData
-
-
 from india_compliance.gst_india.utils.itc_claim import (
     apply_period_filter as _apply_itc_period_filter,
 )
