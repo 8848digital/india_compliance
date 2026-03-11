@@ -1321,14 +1321,11 @@ function is_e_waybill_cancellable(frm) {
 async function update_gst_tranporter_id(dialog) {
     let transporter_id = "";
     const transporter = dialog.get_value("transporter");
-    if (transporter) {
-        const { message: response } = await frappe.db.get_value(
-            "Supplier",
-            transporter,
-            "gst_transporter_id",
-        );
-        transporter_id = response?.gst_transporter_id || "";
-    }
+    const { message: response } = await frappe.db.get_value(
+        "Supplier",
+        transporter,
+        "gst_transporter_id",
+    );
 
     dialog.set_value("gst_transporter_id", transporter_id);
 }
