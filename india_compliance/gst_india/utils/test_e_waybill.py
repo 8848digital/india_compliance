@@ -16,7 +16,6 @@ from frappe.www.printview import get_html_and_style
 from erpnext.controllers.sales_and_purchase_return import make_return_doc
 
 from india_compliance.gst_india.api_classes.base import BASE_URL
-from india_compliance.gst_india.constants import SERVICE_HSN_PREFIX
 from india_compliance.gst_india.overrides.sales_invoice import (
     is_e_waybill_applicable,
 )
@@ -1699,7 +1698,7 @@ def with_intrastate_config(config_rows):
     return decorator
 
 
-class TestEWaybillThreshold(FrappeTestCase):
+class TestEWaybillThreshold(IntegrationTestCase):
     """Tests for state-wise e-Waybill threshold configuration (PR #3968)"""
 
     @classmethod
