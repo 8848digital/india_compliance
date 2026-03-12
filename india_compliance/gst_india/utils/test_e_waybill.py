@@ -1698,7 +1698,7 @@ def with_intrastate_config(config_rows):
     return decorator
 
 
-class TestEWaybillThreshold(IntegrationTestCase):
+class TestEWaybillThreshold(FrappeTestCase):
     """Tests for state-wise e-Waybill threshold configuration (PR #3968)"""
 
     @classmethod
