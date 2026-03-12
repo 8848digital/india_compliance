@@ -4,7 +4,10 @@
 import json
 
 import frappe
+<<<<<<< HEAD
 from frappe.tests.utils import FrappeTestCase, change_settings
+
+from frappe.tests import IntegrationTestCase, change_settings
 from frappe.utils import get_month, getdate
 
 from india_compliance.gst_india.doctype.bill_of_entry.bill_of_entry import (
@@ -30,7 +33,6 @@ class TestGSTR3BReport(FrappeTestCase):
             "Purchase Invoice",
             "GSTR 3B Report",
             "Journal Entry",
-            "Bill of Entry",
         ):
             frappe.db.delete(doctype, filters=filters)
 
@@ -206,6 +208,30 @@ class TestGSTR3BReport(FrappeTestCase):
 
         gst_settings.round_off_gst_values = 1
         gst_settings.save()
+
+    def test_itc_reversal_journal_entry_is_included_in_gstr_3b(self):
+        journal_entry = create_itc_reversal_journal_entry()
+
+        self.assertEqual(journal_entry.accounts[1].gst_tax_type, "cgst")
+        self.assertEqual(journal_entry.accounts[2].gst_tax_type, "sgst")
+
+        today = getdate()
+
+        report = frappe.get_doc(
+            {
+                "doctype": "GSTR 3B Report",
+                "company": "_Test Indian Registered Company",
+                "company_gstin": "24AAQCA8719H1ZC",
+                "year": today.year,
+                "month_or_quarter": get_month(today),
+            }
+        ).insert()
+
+        output = json.loads(report.json_output)
+        self.assertEqual(output["itc_elg"]["itc_rev"][0]["camt"], 9.0)
+        self.assertEqual(output["itc_elg"]["itc_rev"][0]["samt"], 9.0)
+        self.assertEqual(output["itc_elg"]["itc_net"]["camt"], -9.0)
+        self.assertEqual(output["itc_elg"]["itc_net"]["samt"], -9.0)
 
 
 def create_sales_invoices():
