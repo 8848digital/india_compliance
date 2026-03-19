@@ -132,11 +132,6 @@ class GSTR3BReport(Document):
             gstr3b_filters = self._get_gstr3b_filters()
             gstr3b = GSTR3BInvoices(gstr3b_filters)
             pi_items = gstr3b.get_data("Purchase Invoice", group_by_invoice=False)
-            # Preserve any PI vouchers that had no matching category (e.g. items
-            # with a blank gst_treatment) so they appear in missing_field_invoices.
-            self._unmatched_purchase_vouchers = getattr(
-                gstr3b, "_unmatched_vouchers", set()
-            )
 
             # Tables 3.1 (outward), 3.1.1 (eco), 3.2 (inter-state)
             # Source: GSTR1Invoices (Sales Invoice data)
@@ -350,14 +345,6 @@ class GSTR3BReport(Document):
                 continue
             if item.get("invoice_category") == "ITC Reversed":
                 continue
-            # Nil/exempt/composition and non-GST items on an RC PI belong to
-            # table 5 only (process_inward_nil_exempt).  Including them here
-            # would double-count the same supply in both 3.1(d) and table 5.
-            if item.get("invoice_category") in (
-                "Composition Scheme, Exempted, Nil Rated",
-                "Non-GST",
-            ):
-                continue
             section["txval"] += item.taxable_value or 0
             section["iamt"] += item.igst_amount or 0
             section["camt"] += item.cgst_amount or 0
@@ -539,14 +526,6 @@ class GSTR3BReport(Document):
         missing_field_invoices.extend(
             inv
             for inv in getattr(self, "_not_defined_invoices", set())
-            if inv not in missing_set
-        )
-        # Refresh the dedup-set before adding the next source so that an invoice
-        # already added via _not_defined_invoices is not emitted again.
-        missing_set = set(missing_field_invoices)
-        missing_field_invoices.extend(
-            inv
-            for inv in getattr(self, "_unmatched_purchase_vouchers", set())
             if inv not in missing_set
         )
 
