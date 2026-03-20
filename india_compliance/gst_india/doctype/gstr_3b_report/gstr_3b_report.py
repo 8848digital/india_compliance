@@ -667,7 +667,6 @@ class GSTR3BExcelExporter:
         "txval": 3,
         "iamt": 4,
         "camt": 5,
-        "samt": 6,
         "csamt": 7,
     }
 
@@ -675,7 +674,6 @@ class GSTR3BExcelExporter:
     ITC_COLUMNS: ClassVar[dict] = {
         "iamt": 3,
         "camt": 4,
-        "samt": 5,
         "csamt": 6,
     }
 
@@ -710,8 +708,8 @@ class GSTR3BExcelExporter:
     }
 
     COLUMN_SETS = {
-        "tax": ["txval", "iamt", "camt", "samt", "csamt"],
-        "itc": ["iamt", "camt", "samt", "csamt"],
+        "tax": ["txval", "iamt", "camt", "csamt"],
+        "itc": ["iamt", "camt", "csamt"],
         "import_itc": ["iamt", "csamt"],
         "inward": ["inter", "intra"],
         "zero_rated": ["txval", "iamt", "csamt"],
