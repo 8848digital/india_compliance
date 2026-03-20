@@ -164,18 +164,6 @@ class GSTR3BSubcategory(GSTR3BCategoryConditions):
     def set_for_itc_available_boe(self, invoice):
         invoice.invoice_sub_category = "Import Of Goods"
 
-    def set_for_itc_reversed_boe(self, invoice):
-        """
-        All BOE item reversals are reported under "As per rules 42 & 43" (RUL).
-        Using a dedicated method (rather than the shared set_for_itc_reversed)
-        avoids an implicit dependency on ineligibility_reason, which is not
-        present on BOE rows — the shared method only happened to produce the
-        correct result because None != "Others".
-        """
-        invoice.invoice_sub_category = (
-            "As per rules 42 & 43 of CGST Rules and section 17(5)"
-        )
-
     def set_for_itc_reversed_je(self, invoice):
         """
         Restore the pre-rewrite default for Journal Entry reversals:

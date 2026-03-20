@@ -258,14 +258,10 @@ class GSTR3BReport(Document):
 
                 if invoice.is_reverse_charge and invoice.ecommerce_gstin:
                     eco_taxable_value += taxable_value
-                    continue  # eco-RC supplies deducted from 3.1(a); excluded from 3.2
-
-                # Section 3.2 is "of the supplies shown in 3.1(a)" — only taxable
-                # outward supplies (osup_det) are in scope.  Nil-Rated, Exempted,
-                # Zero-Rated and Non-GST supplies must NOT appear in 3.2.
-                self._update_inter_state_supply(
-                    invoice, taxable_value, inter_state_supply
-                )
+                else:
+                    self._update_inter_state_supply(
+                        invoice, taxable_value, inter_state_supply
+                    )
 
             elif gst_treatment == "Zero-Rated":
                 section["iamt"] += invoice.igst_amount or 0
