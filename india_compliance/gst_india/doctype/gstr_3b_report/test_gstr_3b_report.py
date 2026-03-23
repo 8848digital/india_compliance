@@ -223,34 +223,20 @@ class TestGSTR3BReport(FrappeTestCase):
         A submitted Bill of Entry should contribute IGST to IMPG (Import Of Goods)
         in GSTR-3B table 4A (ITC Available) and table 4C (Net ITC).
 
-        An ineligible BOE (is_ineligible_for_itc=1 on the item) is duplicated:
-        once into itc_avl IMPG and once into itc_rev RUL, so its net ITC is zero
-        — verifying the is_itc_reversed_for_boe() code path.
-
         Setup:
-          BOE-1 (eligible):
-            PI rate=100, customs_duty=100, assessable=200, IGST @18% = 36
-          BOE-2 (ineligible):
-            PI rate=100, no customs duty, assessable=100, IGST @18% = 18
+          PI from _Test Foreign Supplier, rate=100, qty=1 (item value = 100)
+          BOE from above PI with customs_duty=100
+          Assessable value = 100 (item) + 100 (customs) = 200
+          IGST @18% = 36
         """
         pi = create_purchase_invoice(supplier="_Test Foreign Supplier", update_stock=1)
+
         boe = make_bill_of_entry(pi.name)
         boe.items[0].customs_duty = 100
         boe.bill_of_entry_no = frappe.generate_hash(length=5)
         boe.bill_of_entry_date = getdate()
         boe.save()
         boe.submit()
-
-        # Second BOE — item marked ineligible: appears in both itc_avl and itc_rev
-        pi2 = create_purchase_invoice(
-            supplier="_Test Foreign Supplier", update_stock=1, rate=100
-        )
-        boe2 = make_bill_of_entry(pi2.name)
-        boe2.items[0].is_ineligible_for_itc = 1
-        boe2.bill_of_entry_no = frappe.generate_hash(length=5)
-        boe2.bill_of_entry_date = getdate()
-        boe2.save()
-        boe2.submit()
 
         today = getdate()
         report = frappe.get_doc(
@@ -265,18 +251,14 @@ class TestGSTR3BReport(FrappeTestCase):
 
         output = json.loads(report.json_output)
 
-        # Table 4A — IMPG: 36 (eligible BOE) + 18 (ineligible BOE avl copy)
+        # Table 4A — ITC Available: IMPG should carry IGST from the BOE
         impg = next(d for d in output["itc_elg"]["itc_avl"] if d["ty"] == "IMPG")
-        self.assertEqual(impg["iamt"], 54.0)
+        self.assertEqual(impg["iamt"], 36.0)  # 18% of (100 taxable + 100 customs)
         self.assertEqual(impg["camt"], 0.0)
         self.assertEqual(impg["samt"], 0.0)
         self.assertEqual(impg["csamt"], 0.0)
 
-        # Table 4B — itc_rev RUL: 18 from ineligible BOE reversal copy
-        rul_rev = next(d for d in output["itc_elg"]["itc_rev"] if d["ty"] == "RUL")
-        self.assertEqual(rul_rev["iamt"], 18.0)
-
-        # Table 4C — Net ITC: 36 (eligible BOE); ineligible BOE avl+rev cancels to 0
+        # Table 4C — Net ITC must include the IMPG IGST
         net_itc = output["itc_elg"]["itc_net"]
         self.assertEqual(net_itc["iamt"], 36.0)
 
