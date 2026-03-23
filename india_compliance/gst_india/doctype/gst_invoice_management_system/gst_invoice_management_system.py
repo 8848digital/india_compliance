@@ -192,7 +192,9 @@ class GSTInvoiceManagementSystem(Document):
         )
 
     @frappe.whitelist()
-    def get_invoice_details(self, purchase_name: str, inward_supply_name: str):
+    def get_invoice_details(
+        self, purchase_name: str | None, inward_supply_name: str | None
+    ):
         frappe.has_permission("GST Invoice Management System", "write", throw=True)
 
         inward_supply_names = [inward_supply_name] if inward_supply_name else None
@@ -225,9 +227,9 @@ class GSTInvoiceManagementSystem(Document):
     @frappe.whitelist()
     def link_documents(
         self,
-        purchase_invoice_name: str,
-        inward_supply_name: str,
-        link_doctype: str,
+        purchase_invoice_name: str | None,
+        inward_supply_name: str | None,
+        link_doctype: str | None,
     ):
         frappe.has_permission("GST Invoice Management System", "write", throw=True)
 
