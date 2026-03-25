@@ -10,72 +10,65 @@ from collections import defaultdict
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.query_builder.functions import IfNull
 from frappe.utils import cint, cstr, flt, get_first_day, get_last_day
 from openpyxl.cell.cell import MergedCell
 
 from india_compliance.gst_india.constants import (
     INVOICE_DOCTYPES,
     STATE_NUMBERS,
+    TAXABLE_GST_TREATMENTS,
 )
 from india_compliance.gst_india.overrides.transaction import is_inter_state_supply
-
+<<<<<<< HEAD
 from india_compliance.gst_india.report.gstr_1.gstr_1 import GSTR11A11BData
 from india_compliance.gst_india.report.gstr_3b_details.gstr_3b_details import (
     IneligibleITC,
 )
-
-
-from india_compliance.gst_india.report.gst_purchase_register.gst_purchase_register import (
-    AMOUNT_FIELDS_MAP,
-    SECTION_MAPPING,
-    get_sub_category_summary,
-)
-
+=======
+>>>>>>> 26dbbe72 (refactor: gstr_3b_report)
 from india_compliance.gst_india.utils import (
     get_data_file_path,
+    get_gst_accounts_by_type,
     get_period,
 )
 from india_compliance.gst_india.utils.exporter import ExcelExporter
-
-
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
 from india_compliance.gst_india.utils.gstr3b.gstr3b_data import GSTR3BInvoices
-
+=======
 from india_compliance.gst_india.utils.gstr3b.gstr3b_data import (
+    ITC_AVAILABLE_SUB_CATEGORY_MAP,
+    ITC_REVERSED_INDEX_MAP,
     GSTR3BInvoices,
 )
-
-from india_compliance.gst_india.utils.gstr_1 import GSTR1_SubCategory
+>>>>>>> cb4e341c (chore: nitpick comments)
 from india_compliance.gst_india.utils.gstr_1.gstr_1_data import (
     GSTR1Invoices,
     GSTR11A11BData,
 )
-
+>>>>>>> 26dbbe72 (refactor: gstr_3b_report)
 from india_compliance.gst_india.utils.itc_claim import (
     apply_period_filter as _apply_itc_period_filter,
 )
 
-
 VALUES_TO_UPDATE = ["iamt", "camt", "samt", "csamt"]
 
-# Maps GSTR-3B sub-category labels to the 'ty' key in the JSON template (ITC Available)
-ITC_AVAILABLE_SUB_CATEGORY_MAP = {
-    "Import Of Goods": "IMPG",
-    "Import Of Service": "IMPS",
-    "ITC on Reverse Charge": "ISRC",
-    "Input Service Distributor": "ISD",
-    "All Other ITC": "OTH",
-}
-
-# Maps GSTR-3B ITC Reversed sub-category labels to the 'ty' key in the JSON template
-ITC_REVERSED_SUB_CATEGORY_TY_MAP = {
-    "As per rules 42 & 43 of CGST Rules and section 17(5)": "RUL",
-    "Others": "OTH",
+# Map GST treatment on SI items to the corresponding 3.1 section key
+GST_TREATMENT_SECTION_MAP = {
+    "Nil-Rated": "osup_nil_exmp",
+    "Exempted": "osup_nil_exmp",
+    "Zero-Rated": "osup_zero",
+    "Non-GST": "osup_nongst",
+    "Taxable": "osup_det",
 }
 
 # GST categories that need to be reported in section 3.2 (inter-state supplies)
-INTER_STATE_GST_CATEGORIES = frozenset({"Unregistered", "Registered Composition", "UIN Holders"})
+INTER_STATE_GST_CATEGORIES = frozenset(
+    {"Unregistered", "Registered Composition", "UIN Holders"}
+)
 
-<<<<<<< HEAD
 # Maps invoice amount fields to JSON key names used in the ITC section
 _ITC_FIELD_MAP = {
     "iamt": "igst_amount",
@@ -84,13 +77,6 @@ _ITC_FIELD_MAP = {
     "csamt": "cess_amount",
 }
 from typing import ClassVar
-
-# Maps ITC ineligible / reclaimed category labels to the 'ty' key in itc_inelg
-# (consistent with avl_by_ty / rev_by_ty lookup pattern in process_itc)
-_ITC_INELG_CATEGORY_TY_MAP = {
-    "Ineligible ITC": "OTH",  # PoS-restricted ineligible  → itc_inelg ty=OTH
-    "ITC Reclaimed": "RUL",  # Reclaim of earlier reversal → itc_inelg ty=RUL
-}
 
 
 class GSTR3BReport(Document):
@@ -112,9 +98,8 @@ class GSTR3BReport(Document):
 
     def validate(self):
         self.json_output = ""
+        self.missing_field_invoices = ""
         self.generation_status = "In Process"
-        if not self.company_gstin:
-            frappe.throw(_("Please enter GSTIN for Company {0}").format(self.company))
 
         if self.enqueue_report:
             frappe.msgprint(_("Initiated report generation in background"), alert=True)
@@ -125,17 +110,23 @@ class GSTR3BReport(Document):
 
     def get_data(self):
         try:
-            if not self.company_gstin:
-                frappe.throw(_("Please enter GSTIN for Company {0}").format(self.company))
             self.report_dict = json.loads(get_json("gstr_3b_report_template"))
 
             if not self.company_gstin:
-                frappe.throw(_("Please enter GSTIN for Company {0}").format(self.company))
+                frappe.throw(
+                    _("Please enter GSTIN for Company {0}").format(self.company)
+                )
             self.report_dict["gstin"] = self.company_gstin
-            self.report_dict["ret_period"] = get_period(self.month_or_quarter, self.year)
+            self.report_dict["ret_period"] = get_period(
+                self.month_or_quarter, self.year
+            )
             self.month_or_quarter_no = get_period(self.month_or_quarter)
-            self.from_date = get_first_day(f"{cint(self.year)}-{self.month_or_quarter_no[0]}-01")
-            self.to_date = get_last_day(f"{cint(self.year)}-{self.month_or_quarter_no[1]}-01")
+            self.from_date = get_first_day(
+                f"{cint(self.year)}-{self.month_or_quarter_no[0]}-01"
+            )
+            self.to_date = get_last_day(
+                f"{cint(self.year)}-{self.month_or_quarter_no[1]}-01"
+            )
 
             gstr1_filters = self._get_gstr1_filters()
             gstr3b_filters = self._get_gstr3b_filters()
@@ -143,7 +134,9 @@ class GSTR3BReport(Document):
             pi_items = gstr3b.get_data("Purchase Invoice", group_by_invoice=False)
             # Preserve any PI vouchers that had no matching category (e.g. items
             # with a blank gst_treatment) so they appear in missing_field_invoices.
-            self._unmatched_purchase_vouchers = getattr(gstr3b, "_unmatched_vouchers", set())
+            self._unmatched_purchase_vouchers = getattr(
+                gstr3b, "_unmatched_vouchers", set()
+            )
 
             # Tables 3.1 (outward), 3.1.1 (eco), 3.2 (inter-state)
             # Source: GSTR1Invoices (Sales Invoice data)
@@ -174,6 +167,7 @@ class GSTR3BReport(Document):
                 self.db_set(
                     {
                         "json_output": self.json_output,
+                        "missing_field_invoices": self.missing_field_invoices,
                         "generation_status": self.generation_status,
                     }
                 )
@@ -185,9 +179,23 @@ class GSTR3BReport(Document):
             raise e
 
         finally:
-            frappe.publish_realtime("gstr3b_report_generation", doctype=self.doctype, docname=self.name)
+            frappe.publish_realtime(
+                "gstr3b_report_generation", doctype=self.doctype, docname=self.name
+            )
 
-    def _get_filters(self):
+    def _get_gstr1_filters(self):
+        """Filters for GSTR1Invoices (Sales Invoice data)."""
+        return frappe._dict(
+            {
+                "company": self.company,
+                "company_gstin": self.company_gstin,
+                "from_date": self.from_date,
+                "to_date": self.to_date,
+            }
+        )
+
+    def _get_gstr3b_filters(self):
+        """Filters for GSTR3BInvoices (Purchase / BOE / JE data)."""
         return frappe._dict(
             {
                 "company": self.company,
@@ -198,33 +206,22 @@ class GSTR3BReport(Document):
             }
         )
 
-    def _process_outward_supply_data(self):
-        """
-        Tables 3.1 (outward supplies), 3.1.1 (e-commerce), 3.2 (inter-state),
-        and 3.3 (advances) — all derived from Sales Invoice data.
-        """
-        self.process_outward_supplies()
-        self.set_advances_received_or_adjusted()
+    def apply_itc_period_filter(self, query, doc):
+        return _apply_itc_period_filter(
+            query,
+            doc,
+            self.from_date,
+            self.to_date,
+            filter_by=self.filter_by,
+        )
 
-    def _process_inward_supply_data(self):
+    def process_outward_supplies(self, gstr1_filters):
         """
-        Tables 3.1(d) (RC inward), 4 (ITC), and 5 (nil/exempt inward)
-        — derived from Purchase Invoice, Bill of Entry, and Journal Entry.
-        """
-        gstr3b = GSTR3BInvoices(self._get_filters())
-        pi_items = gstr3b.get_data("Purchase Invoice", group_by_invoice=False)
-
-        self.process_reverse_charge_inward(pi_items)
-        self.process_itc(gstr3b)
-        self.process_inward_nil_exempt(pi_items)
-
-    def process_outward_supplies(self):
-        """
-        Populate sections 3.1 (outward supply details), 3.1.1 (e-commerce
+        Populate sections 3.1 (outward supply details), 3.1.1 (e-commerce RC
         supplies) and 3.2 (inter-state supplies) from Sales Invoice line-item
         data provided by GSTR1Invoices.
 
-        Section 3.1 mapping:
+        Mapping:
           gst_treatment == "Nil-Rated" / "Exempted"  → osup_nil_exmp  (txval only)
           gst_treatment == "Non-GST"                  → osup_nongst    (txval only)
           gst_treatment == "Zero-Rated"               → osup_zero      (txval + iamt + csamt)
@@ -232,36 +229,17 @@ class GSTR3BReport(Document):
           gst_treatment == "Taxable" (RC)             → osup_det       (txval only, no taxes)
           gst_treatment == "Taxable" (RC + eco GSTIN) → eco_reg_sup   (txval only, deducted from osup_det)
                                                          NOT reported in section 3.2 (no longer in 3.1(a))
-
-        Section 3.1.1 e-commerce split (confirmed against Excel template v5.7):
-          eco_reg_sup  — Row 23 — 3.1.1(ii):
-              Registered SELLER's taxable value for supplies made through an ECO
-              that is liable to pay GST u/s 9(5) on their behalf (RC invoices
-              with ecommerce_gstin set).  Only txval is reported; taxes are paid
-              by the ECO.  Correctly deducted from osup_det.
-          eco_sup      — Row 22 — 3.1.1(i):
-              Reported by the ECO OPERATOR itself for supplies on which it pays
-              tax u/s 9(5).  This field is relevant only when the company filing
-              the return IS an ECO operator (e.g. Ola, Zomato, Urban Company).
-              Population of eco_sup for ECO operators is not yet implemented
-              (same gap as the pre-refactor code).
         """
-        gstr1 = GSTR1Invoices(self._get_filters())
+        gstr1 = GSTR1Invoices(gstr1_filters)
         invoices = gstr1.get_invoices_for_item_wise_summary()
-        gstr1.process_invoices(invoices)
 
         inter_state_supply = {}
         eco_taxable_value = 0.0
+        not_defined_invoices = set()
 
         for invoice in invoices:
             gst_treatment = invoice.gst_treatment
-            section_key = {
-                "Nil-Rated": "osup_nil_exmp",
-                "Exempted": "osup_nil_exmp",
-                "Zero-Rated": "osup_zero",
-                "Non-GST": "osup_nongst",
-                "Taxable": "osup_det",
-            }.get(gst_treatment)
+            section_key = GST_TREATMENT_SECTION_MAP.get(gst_treatment)
             if not section_key:
                 if gst_treatment == "Not Defined":
                     not_defined_invoices.add(invoice.invoice_no)
@@ -271,10 +249,12 @@ class GSTR3BReport(Document):
             section = self.report_dict["sup_details"][section_key]
             section["txval"] += taxable_value
 
-            if section_key == "osup_det":
+            if gst_treatment == "Taxable":
                 if not invoice.is_reverse_charge:
-                    for key, field in _GSTR1_FIELD_MAP.items():
-                        section[key] += invoice.get(field) or 0
+                    section["iamt"] += invoice.igst_amount or 0
+                    section["camt"] += invoice.cgst_amount or 0
+                    section["samt"] += invoice.sgst_amount or 0
+                    section["csamt"] += invoice.total_cess_amount or 0
 
                 if invoice.is_reverse_charge and invoice.ecommerce_gstin:
                     eco_taxable_value += taxable_value
@@ -283,32 +263,50 @@ class GSTR3BReport(Document):
                 # Section 3.2 is "of the supplies shown in 3.1(a)" — only taxable
                 # outward supplies (osup_det) are in scope.  Nil-Rated, Exempted,
                 # Zero-Rated and Non-GST supplies must NOT appear in 3.2.
-                self._update_inter_state_supply(invoice, taxable_value, inter_state_supply)
+                self._update_inter_state_supply(
+                    invoice, taxable_value, inter_state_supply
+                )
 
             elif gst_treatment == "Zero-Rated":
-                for key in ("iamt", "csamt"):
-                    section[key] += invoice.get(_GSTR1_FIELD_MAP[key]) or 0
+                section["iamt"] += invoice.igst_amount or 0
+                section["csamt"] += invoice.total_cess_amount or 0
 
         self.report_dict["eco_dtls"]["eco_reg_sup"]["txval"] = eco_taxable_value
         self.report_dict["sup_details"]["osup_det"]["txval"] -= eco_taxable_value
 
+        self._not_defined_invoices = not_defined_invoices
         self.set_inter_state_supply(inter_state_supply)
 
     def _update_inter_state_supply(self, invoice, taxable_value, inter_state_supply):
         """
         Collect inter-state supply data for section 3.2.
         Only Unregistered, Registered Composition and UIN Holder categories qualify.
-        If IGST amount is present, the supply is inter-state.
+
+        Note: eco-operator RC invoices (is_reverse_charge + ecommerce_gstin) are
+        excluded by the caller — they are no longer part of 3.1(a) after being
+        deducted into eco_reg_sup and must not contribute to section 3.2.
         """
-        if invoice.gst_category not in INTER_STATE_GST_CATEGORIES:
+        gst_category = invoice.gst_category
+        if gst_category not in INTER_STATE_GST_CATEGORIES:
             return
 
-        igst_amount = invoice.igst_amount or 0
-        if not igst_amount:
+        place_of_supply = invoice.place_of_supply
+        if not place_of_supply:
             return
 
-        place_of_supply = invoice.place_of_supply or ""
-        key = (invoice.gst_category, place_of_supply)
+        doc = frappe._dict(
+            {
+                "doctype": "Sales Invoice",
+                "gst_category": gst_category,
+                "place_of_supply": place_of_supply,
+                "company_gstin": invoice.company_gstin,
+            }
+        )
+
+        if not is_inter_state_supply(doc):
+            return
+
+        key = (gst_category, place_of_supply)
         inter_state_supply.setdefault(
             key,
             {
@@ -319,7 +317,7 @@ class GSTR3BReport(Document):
         )
         inter_state_supply[key]["txval"] += taxable_value
         if not invoice.is_reverse_charge:
-            inter_state_supply[key]["iamt"] += igst_amount
+            inter_state_supply[key]["iamt"] += invoice.igst_amount or 0
 
     def set_inter_state_supply(self, inter_state_supply):
         inter_state_supply_map = {
@@ -333,17 +331,44 @@ class GSTR3BReport(Document):
             if section:
                 self.report_dict["inter_sup"][section].append(value)
 
-    def _update_inward_reverse_charge_section(self, reverse_charge_summary):
-        """Populate section 3.1(d) — inward supplies liable to reverse charge.
+    def process_reverse_charge_inward(self, pi_items):
+        """
+        Populate section 3.1(d) — inward supplies liable to reverse charge —
+        from the pre-fetched Purchase Invoice item-level data, filtered by the
+        is_reverse_charge flag on the invoice header.
 
-        Derived from row-level reverse-charge indicators, not invoice sub-category labels.
+        Using is_reverse_charge (the actual RC-liability flag set at voucher
+        entry) is semantically correct for section 3.1(d): it covers all ITC
+        sub-categories including "Import Of Service" and "All Other ITC" that
+        the old itc_classification == "ITC on Reverse Charge" filter missed.
+        It also prevents PIs that carry the wrong itc_classification from being
+        included incorrectly.
+
+        ITC Reversed duplicate entries — copies appended by get_processed_invoices
+        for ITC-available + Section-17(5) invoices — are skipped to avoid
+        double-counting taxable values and tax amounts.
         """
         section = self.report_dict["sup_details"]["isup_rev"]
-        section["txval"] += reverse_charge_summary.get("taxable_value") or 0
-        for json_key, field in ITC_AMOUNT_KEYS.items():
-            section[json_key] += reverse_charge_summary.get(field) or 0
+        for item in pi_items:
+            if not item.get("is_reverse_charge"):
+                continue
+            if item.get("invoice_category") == "ITC Reversed":
+                continue
+            # Nil/exempt/composition and non-GST items on an RC PI belong to
+            # table 5 only (process_inward_nil_exempt).  Including them here
+            # would double-count the same supply in both 3.1(d) and table 5.
+            if item.get("invoice_category") in (
+                "Composition Scheme, Exempted, Nil Rated",
+                "Non-GST",
+            ):
+                continue
+            section["txval"] += item.taxable_value or 0
+            section["iamt"] += item.igst_amount or 0
+            section["camt"] += item.cgst_amount or 0
+            section["samt"] += item.sgst_amount or 0
+            section["csamt"] += item.cess_amount or 0
 
-    def _set_advances_received_or_adjusted(self):
+    def set_advances_received_or_adjusted(self):
         """Section 3.1(a) of GSTR-3B also includes the difference of advances received and adjusted."""
 
         def update_totals(data, totals, multiplier):
@@ -357,9 +382,18 @@ class GSTR3BReport(Document):
                 totals["samt"] += (tax_amount / 2) if is_intra_state else 0
                 totals["csamt"] += row.cess_amount * multiplier
 
+        filters = frappe._dict(
+            {
+                "company": self.company,
+                "company_gstin": self.company_gstin,
+                "from_date": self.from_date,
+                "to_date": self.to_date,
+            }
+        )
+
         totals = defaultdict(int)
         gst_accounts = get_gst_accounts_by_type(self.company, "Output")
-        _class = GSTR11A11BData(self._get_filters(), gst_accounts)
+        _class = GSTR11A11BData(filters, gst_accounts)
 
         for method, multiplier in (("get_11A_query", 1), ("get_11B_query", -1)):
             query = getattr(_class, method)()
@@ -369,19 +403,19 @@ class GSTR3BReport(Document):
         for key in totals:
             self.report_dict["sup_details"]["osup_det"][key] += totals[key]
 
-    def process_itc(self, gstr3b):
+    def process_itc(self, gstr3b, pi_items):
         """
         Populate table 4 — ITC eligible (4A), reversed (4B), net (4C) and
         ineligible (4D) — from GSTR3BInvoices.
 
         Category → JSON section mapping
         ─────────────────────────────────────────────────────────────
-        ITC Available  → itc_avl       (ty determined by sub-category)
+        ITC Available  → itc_avl  (ty determined by sub-category)
                          also adds to itc_net
-        ITC Reversed   → itc_rev       (ty = RUL or OTH)
+        ITC Reversed   → itc_rev  (ty = RUL or OTH)
                          also subtracts from itc_net
-        Ineligible ITC → itc_inelg OTH (PoS restricted)
-        ITC Reclaimed  → itc_inelg RUL (reclaim of earlier reversal)
+        Ineligible ITC → itc_inelg[1] (OTH — PoS restricted)
+        ITC Reclaimed  → itc_inelg[0] (RUL — reclaim of reversal)
         ─────────────────────────────────────────────────────────────
         Note: GSTR3BInvoices duplicates a PI that is BOTH ITC-available
         AND Section-17(5) ineligible — once under "ITC Available" and
@@ -390,8 +424,8 @@ class GSTR3BReport(Document):
         subtracts from net ITC and adds to itc_rev[RUL], matching the
         existing report behaviour.
         """
-        all_invoices = []
-        for doctype in ("Purchase Invoice", "Bill of Entry", "Journal Entry"):
+        all_invoices = gstr3b.get_invoice_wise_data(pi_items)
+        for doctype in ("Bill of Entry", "Journal Entry"):
             all_invoices.extend(gstr3b.get_data(doctype, group_by_invoice=True))
 
         itc_avl = self.report_dict["itc_elg"]["itc_avl"]
@@ -402,7 +436,6 @@ class GSTR3BReport(Document):
         # Build lookup dicts keyed by 'ty' for fast access
         avl_by_ty = {d["ty"]: d for d in itc_avl}
         rev_by_ty = {d["ty"]: d for d in itc_rev}
-        inelg_by_ty = {d["ty"]: d for d in itc_inelg}
 
         for invoice in all_invoices:
             category = invoice.get("invoice_category")
@@ -411,21 +444,12 @@ class GSTR3BReport(Document):
             if category == "ITC Available":
                 ty = ITC_AVAILABLE_SUB_CATEGORY_MAP.get(sub_category)
                 if not ty:
-                    # Unknown itc_classification on this voucher.  Falling back
-                    # to OTH (All Other ITC) ensures the tax amount is NOT
-                    # silently lost from table 4A — dropping ITC from a GST
-                    # compliance report is a P1 issue.  The voucher is also
-                    # added to missing_field_invoices so the user knows to
-                    # investigate and correct the document.
                     frappe.logger().warning(
                         f"GSTR-3B: unknown ITC Available sub-category "
                         f"{sub_category!r} on {invoice.get('voucher_no')} "
-                        f"— falling back to OTH (All Other ITC)"
+                        f"— skipped from table 4A"
                     )
-                    ty = "OTH"
-                    if not hasattr(self, "_unknown_itc_vouchers"):
-                        self._unknown_itc_vouchers = set()
-                    self._unknown_itc_vouchers.add(invoice.get("voucher_no"))
+                    continue
                 if ty in avl_by_ty:
                     for key in VALUES_TO_UPDATE:
                         amount = invoice.get(_ITC_FIELD_MAP[key]) or 0
@@ -433,30 +457,27 @@ class GSTR3BReport(Document):
                         net_itc[key] += amount
 
             elif category == "ITC Reversed":
-                ty = ITC_REVERSED_SUB_CATEGORY_TY_MAP.get(sub_category)
-                if ty is None:
+                idx = ITC_REVERSED_INDEX_MAP.get(sub_category)
+                if idx is None:
                     frappe.logger().warning(
                         f"GSTR-3B: unknown ITC Reversed sub-category "
                         f"{sub_category!r} on {invoice.get('voucher_no')} "
                         f"— skipped from table 4B"
                     )
                     continue
+                ty = itc_rev[idx]["ty"]
                 for key in VALUES_TO_UPDATE:
                     amount = invoice.get(_ITC_FIELD_MAP[key]) or 0
                     rev_by_ty[ty][key] += amount
                     net_itc[key] -= amount
 
-            elif category in _ITC_INELG_CATEGORY_TY_MAP:
-                ty = _ITC_INELG_CATEGORY_TY_MAP[category]
-                entry = inelg_by_ty.get(ty)
-                if entry is None:
-                    frappe.logger().warning(
-                        f"GSTR-3B: itc_inelg has no entry with ty={ty!r} "
-                        f"— {invoice.get('voucher_no')} skipped from table 4D"
-                    )
-                    continue
+            elif category == "Ineligible ITC":
                 for key in VALUES_TO_UPDATE:
-                    entry[key] += invoice.get(_ITC_FIELD_MAP[key]) or 0
+                    itc_inelg[1][key] += invoice.get(_ITC_FIELD_MAP[key]) or 0
+
+            elif category == "ITC Reclaimed":
+                for key in VALUES_TO_UPDATE:
+                    itc_inelg[0][key] += invoice.get(_ITC_FIELD_MAP[key]) or 0
 
     def process_inward_nil_exempt(self, pi_items):
         """
@@ -468,6 +489,8 @@ class GSTR3BReport(Document):
         categories based on is_inter_state_supply(), mirroring the existing
         address-state logic in the old get_inward_nil_exempt().
         """
+        invoices = pi_items
+
         isup_details = self.report_dict["inward_sup"]["isup_details"]
         gst_entry = next((d for d in isup_details if d["ty"] == "GST"), None)
         non_gst_entry = next((d for d in isup_details if d["ty"] == "NONGST"), None)
@@ -480,7 +503,7 @@ class GSTR3BReport(Document):
                 )
             )
 
-        for invoice in pi_items:
+        for invoice in invoices:
             category = invoice.get("invoice_category")
 
             if category == "Composition Scheme, Exempted, Nil Rated":
@@ -518,19 +541,17 @@ class GSTR3BReport(Document):
 
         missing_set = set(missing_field_invoices)
         missing_field_invoices.extend(
-            inv for inv in getattr(self, "_not_defined_invoices", set()) if inv not in missing_set
+            inv
+            for inv in getattr(self, "_not_defined_invoices", set())
+            if inv not in missing_set
         )
         # Refresh the dedup-set before adding the next source so that an invoice
         # already added via _not_defined_invoices is not emitted again.
         missing_set = set(missing_field_invoices)
         missing_field_invoices.extend(
-            inv for inv in getattr(self, "_unmatched_purchase_vouchers", set()) if inv not in missing_set
-        )
-        # Vouchers whose ITC sub-category was unknown (fell back to OTH).
-        # Surface them so the user knows to correct itc_classification.
-        missing_set = set(missing_field_invoices)
-        missing_field_invoices.extend(
-            inv for inv in getattr(self, "_unknown_itc_vouchers", set()) if inv not in missing_set
+            inv
+            for inv in getattr(self, "_unmatched_purchase_vouchers", set())
+            if inv not in missing_set
         )
 
         return ",".join(missing_field_invoices)
@@ -617,10 +638,6 @@ class GSTR3BExcelExporter:
         "osup_nil_exmp": 13,
         "isup_rev": 14,
         "osup_nongst": 15,
-        # Section 3.1.1 - E-commerce supplies
-        # Row 22 = 3.1.1(i)  [to be furnished by ECO operator paying tax u/s 9(5)]
-        # Row 23 = 3.1.1(ii) [to be furnished by registered person selling through ECO]
-        "eco_sup": 22,
         "eco_reg_sup": 23,
         # Section 3.2 - Inter-state
         "inter_state_start": 88,
@@ -650,6 +667,7 @@ class GSTR3BExcelExporter:
         "txval": 3,
         "iamt": 4,
         "camt": 5,
+        "samt": 6,
         "csamt": 7,
     }
 
@@ -657,6 +675,7 @@ class GSTR3BExcelExporter:
     ITC_COLUMNS: ClassVar[dict] = {
         "iamt": 3,
         "camt": 4,
+        "samt": 5,
         "csamt": 6,
     }
 
@@ -685,12 +704,12 @@ class GSTR3BExcelExporter:
         "NONGST": "inward_non_gst",
     }
 
-    ITC_INELIGIBLE_TYPES: ClassVar[dict] = {
+    ITC_INELIGIBLE_TYPES = {
         "RUL": "itc_reclaimed",
         "OTH": "itc_ineligible",
     }
 
-    COLUMN_SETS: ClassVar[dict] = {
+    COLUMN_SETS = {
         "tax": ["txval", "iamt", "camt", "samt", "csamt"],
         "itc": ["iamt", "camt", "samt", "csamt"],
         "import_itc": ["iamt", "csamt"],
@@ -776,11 +795,6 @@ class GSTR3BExcelExporter:
 
     def _set_ecommerce_supplies(self):
         eco_dtls = self.data.get("eco_dtls", {})
-        # Row 22  — 3.1.1(i): supplies on which the ECO pays tax u/s 9(5).
-        # Populated only when the company filing is itself an ECO operator.
-        self._set_section_data("eco_sup", eco_dtls.get("eco_sup", {}), "tax")
-        # Row 23  — 3.1.1(ii): registered person's taxable value of supplies
-        # made through an ECO that is liable to pay the tax (txval only).
         self._set_section_data("eco_reg_sup", eco_dtls.get("eco_reg_sup", {}), "taxable_only")
 
     def _set_inter_state_supplies(self):
@@ -790,7 +804,10 @@ class GSTR3BExcelExporter:
         if not pos_data:
             return
 
+        max_rows = len(self._STATE_CODE_TO_NAME)
         for i, (pos, data) in enumerate(sorted(pos_data.items())):
+            if i >= max_rows:
+                break
             row = self.ROWS["inter_state_start"] + i
             self._set_inter_state_row(row, pos, data)
 
@@ -837,7 +854,9 @@ class GSTR3BExcelExporter:
         itc_elg = self.data.get("itc_elg", {})
         self._populate_itc_sections(itc_elg.get("itc_avl", []), self.ITC_AVAILABLE_TYPES)
         self._populate_itc_sections(itc_elg.get("itc_rev", []), self.ITC_REVERSED_TYPES)
-        self._populate_itc_sections(itc_elg.get("itc_inelg", []), self.ITC_INELIGIBLE_TYPES)
+        self._populate_itc_sections(
+            itc_elg.get("itc_inelg", []), self.ITC_INELIGIBLE_TYPES
+        )
 
     def _populate_itc_sections(self, itc_entries, type_mapping):
         for itc_entry in itc_entries:
@@ -871,8 +890,13 @@ class GSTR3BExcelExporter:
 
     def _set_cell(self, row, column, value):
         cell = self.worksheet.cell(row, column)
-        if not isinstance(cell, MergedCell):
-            cell.value = value
+        if isinstance(cell, MergedCell):
+            return
+        # Preserve template formulas (e.g. SGST = CGST mirror cells);
+        # only write to plain-value cells.
+        if isinstance(cell.value, str) and cell.value.startswith("="):
+            return
+        cell.value = value
 
     @classmethod
     def _format_place_of_supply(cls, state_code):
