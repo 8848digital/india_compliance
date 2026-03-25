@@ -27,7 +27,7 @@ frappe.ui.form.on("GSTR 3B Report", {
         const is_filed = frm.doc.filing_status === "Filed";
         frm.page.set_indicator(
             is_filed ? __("Filed") : __("Not Filed"),
-            is_filed ? "green" : "orange"
+            is_filed ? "green" : "orange",
         );
 
         frm.set_intro(__("Please save the report again to rebuild or update"));
@@ -38,9 +38,9 @@ frappe.ui.form.on("GSTR 3B Report", {
             var w = window.open(
                 frappe.urllib.get_full_url(
                     "/api/method/india_compliance.gst_india.doctype.gstr_3b_report.gstr_3b_report.make_json?" +
-                    "name=" +
-                    encodeURIComponent(frm.doc.name)
-                )
+                        "name=" +
+                        encodeURIComponent(frm.doc.name),
+                ),
             );
 
             if (!w) {
@@ -54,9 +54,9 @@ frappe.ui.form.on("GSTR 3B Report", {
             var w = window.open(
                 frappe.urllib.get_full_url(
                     "/api/method/india_compliance.gst_india.doctype.gstr_3b_report.gstr_3b_report.download_gstr3b_as_excel?" +
-                    "name=" +
-                    encodeURIComponent(frm.doc.name)
-                )
+                        "name=" +
+                        encodeURIComponent(frm.doc.name),
+                ),
             );
 
             if (!w) {
@@ -115,10 +115,8 @@ frappe.ui.form.on("GSTR 3B Report", {
         });
 
         if (!frm.is_new()) {
-            let action =
-                frm.doc.filing_status === "Filed" ? "Not Filed" : "Filed";
-            let status_label =
-                action === "Filed" ? __("Filed") : __("Unfiled");
+            let action = frm.doc.filing_status === "Filed" ? "Not Filed" : "Filed";
+            let status_label = action === "Filed" ? __("Filed") : __("Unfiled");
 
             frm.add_custom_button(
                 __("Mark as {0}", [status_label]),
@@ -140,10 +138,10 @@ frappe.ui.form.on("GSTR 3B Report", {
                                 },
                                 callback: () => frm.reload_doc(),
                             });
-                        }
+                        },
                     );
                 },
-                __("Filing Status")
+                __("Filing Status"),
             );
         }
     },
