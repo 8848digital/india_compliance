@@ -1,5 +1,9 @@
 import frappe
+<<<<<<< HEAD
 from frappe.tests.utils import FrappeTestCase, change_settings
+=======
+from frappe.tests import IntegrationTestCase, change_settings
+>>>>>>> bfcf8d35 (feat: allow BOE for Import of Goods from SEZ (#4103))
 from frappe.utils import getdate
 
 from india_compliance.gst_india.doctype.bill_of_entry.bill_of_entry import (
@@ -25,7 +29,11 @@ def _filters(posting_date):
     )
 
 
+<<<<<<< HEAD
 class TestSummaryOfITCAvailed(FrappeTestCase):
+=======
+class TestSummaryOfITCAvailed(IntegrationTestCase):
+>>>>>>> bfcf8d35 (feat: allow BOE for Import of Goods from SEZ (#4103))
     def setUp(self):
         filters = {"company": COMPANY}
         for doctype in ("Purchase Invoice", "Bill of Entry"):
