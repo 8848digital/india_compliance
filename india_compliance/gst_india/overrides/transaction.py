@@ -20,6 +20,7 @@ from india_compliance.gst_india.constants import (
     STATE_NUMBERS,
     SUBCONTRACTING_DOCTYPES,
     TAX_TYPES,
+    TAXABLE_GST_TREATMENTS,
 )
 from india_compliance.gst_india.constants.custom_fields import E_WAYBILL_INV_FIELDS
 from india_compliance.gst_india.doctype.gst_settings.gst_settings import (
@@ -1943,8 +1944,6 @@ def update_gst_details(doc, method=None):
         doc.update_valuation_rate()
 
 
-<<<<<<< HEAD
-=======
 def validate_item_tax_template(doc):
     if ignore_gst_validations(doc):
         return
@@ -1999,7 +1998,6 @@ def validate_item_tax_template(doc):
         )
 
 
->>>>>>> 3832ce2d (feat: allow BOE for Import of Goods from SEZ (#4103))
 def after_mapping(target_doc, method=None, source_doc=None):
     # Copy e-Waybill fields only from DN to SI
     if not source_doc or source_doc.doctype not in (
