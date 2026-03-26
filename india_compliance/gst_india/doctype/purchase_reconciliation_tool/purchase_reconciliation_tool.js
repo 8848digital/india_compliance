@@ -1121,11 +1121,15 @@ class ImportDialog {
                     const period = this.dialog.get_value("period");
                     if (!period) return;
 
-                    this.date_range = this.dialog.get_value("date_range");
-                    if (period !== "Custom") {
-                        const { message } = await this.frm._call("get_date_range", {
-                            period,
-                        });
+                    if (period === "Custom") {
+                        this.date_range = this.dialog.get_value("date_range");
+                        this.fetch_import_history();
+                        return;
+                    }
+
+                    const { message } = await this.frm._call("get_date_range", {
+                        period,
+                    });
 
                         if (message) this.date_range = message;
                     }
