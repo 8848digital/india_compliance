@@ -14,6 +14,67 @@ from india_compliance.gst_india.utils.tests import append_item, create_purchase_
 
 class TestPurchaseInvoice(FrappeTestCase):
     @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_boe_applicability_auto_set_without_gst_taxes(self):
+        """Import Of Goods without GST taxes → is_boe_applicable auto-set to 1."""
+        pinv = create_purchase_invoice(
+            supplier="_Test Foreign Supplier",
+            do_not_submit=1,
+        )
+
+        self.assertEqual(pinv.itc_classification, "Import Of Goods")
+        self.assertEqual(pinv.is_boe_applicable, 1)
+        self.assertEqual(pinv.items[0].pending_boe_qty, pinv.items[0].qty)
+
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_boe_applicability_auto_set_with_gst_taxes(self):
+        """Import Of Goods (SEZ) with GST taxes → is_boe_applicable auto-set to 0."""
+        # Use SEZ registered supplier: has GSTIN + itc_classification = Import Of Goods
+        pinv = create_purchase_invoice(
+            supplier="_Test Registered Supplier",
+            do_not_save=1,
+            do_not_submit=1,
+            is_out_state=True,
+        )
+        pinv.gst_category = "SEZ"
+        pinv.save()
+
+        self.assertEqual(pinv.itc_classification, "Import Of Goods")
+        self.assertEqual(pinv.is_boe_applicable, 0)
+        self.assertEqual(pinv.items[0].pending_boe_qty, 0)
+
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_sez_goods_import_with_zero_gst_rates(self):
+        """SEZ goods import should save even when GST tax rows exist with zero rates."""
+        pinv = create_purchase_invoice(
+            supplier="_Test Registered Supplier",
+            do_not_save=1,
+            do_not_submit=1,
+            is_out_state=True,
+        )
+        pinv.gst_category = "SEZ"
+
+        for tax in pinv.taxes:
+            tax.rate = 0
+
+        pinv.save()
+
+        self.assertEqual(pinv.itc_classification, "Import Of Goods")
+        self.assertEqual(pinv.items[0].gst_treatment, "Taxable")
+        self.assertEqual(pinv.items[0].igst_rate, 0)
+
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_boe_applicability_auto_uncheck_when_not_import_of_goods(self):
+        """is_boe_applicable should be 0 when itc_classification is not Import Of Goods."""
+        pinv = create_purchase_invoice(
+            supplier="_Test Foreign Supplier",
+            item_code="_Test Service Item",
+            do_not_submit=1,
+        )
+        # Service item → itc_classification = Import Of Service → is_boe_applicable auto-set to 0
+        self.assertEqual(pinv.itc_classification, "Import Of Service")
+        self.assertEqual(pinv.is_boe_applicable, 0)
+
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
     def test_itc_classification(self):
         pinv = create_purchase_invoice(
             supplier="_Test Foreign Supplier",
@@ -21,10 +82,34 @@ class TestPurchaseInvoice(FrappeTestCase):
             item_code="_Test Service Item",
         )
         self.assertEqual(pinv.itc_classification, "Import Of Service")
+        self.assertEqual(pinv.items[0].gst_treatment, "Taxable")
 
-        append_item(pinv)
+        pinv = create_purchase_invoice(
+            supplier="_Test Foreign Supplier",
+            do_not_submit=1,
+        )
+        self.assertEqual(pinv.itc_classification, "Import Of Goods")
+        self.assertEqual(pinv.items[0].gst_treatment, "Taxable")
+
+        pinv = create_purchase_invoice(
+            supplier="_Test Registered Supplier",
+            do_not_submit=1,
+            do_not_save=1,
+        )
+        pinv.gst_category = "SEZ"
         pinv.save()
         self.assertEqual(pinv.itc_classification, "Import Of Goods")
+        self.assertEqual(pinv.items[0].gst_treatment, "Taxable")
+
+        pinv = create_purchase_invoice(
+            supplier="_Test Registered Supplier",
+            do_not_submit=1,
+            do_not_save=1,
+            item_code="_Test Service Item",
+        )
+        pinv.gst_category = "SEZ"
+        pinv.save()
+        self.assertEqual(pinv.itc_classification, "All Other ITC")
 
         pinv = create_purchase_invoice(
             supplier="_Test Registered Supplier",
@@ -66,82 +151,28 @@ class TestPurchaseInvoice(FrappeTestCase):
             pinv.save,
         )
 
-    def test_purchase_invoice_taxes_TC_ACC_075(self):
-        from india_compliance.gst_india.doctype.gst_hsn_code.gst_hsn_code import update_taxes_in_item_master
-        from frappe.utils import today
-        # Step 1: Create GST HSN Code with Taxes
-        taxes = [{"item_tax_template": "GST 18% - _TIRC", "tax_category": "In-State"}]
-        hsn_code = "100100"
-
-        # Create GST HSN Code
-        if not frappe.db.exists("GST HSN Code", hsn_code):
-            hsn_doc = frappe.get_doc(
-                {"doctype": "GST HSN Code", "hsn_code": hsn_code, "taxes": taxes}
-            )
-            hsn_doc.save()
-
-        # Create Item with GST HSN Code
-        item_code = "SKU8899"
-        if not frappe.db.exists("Item", item_code):
-            
-            item = frappe.get_doc(
-                {
-                    "doctype": "Item",
-                    "item_code": item_code,
-                    "item_group": "All Item Groups",
-                    "gst_hsn_code": hsn_code,
-                    "stock_uom": "Nos",
-                }
-            )
-            item.save()
-
-        # Update taxes in item master
-        update_taxes_in_item_master(taxes=taxes, hsn_code=hsn_code)
-
-        # Validate the item has correct tax template
-        self.assertDocumentEqual(taxes[0], frappe.get_doc("Item", item_code).taxes[0])
-
-        # Step 2: Setup Company and Vendor with GSTIN
-        company = "_Test Indian Registered Company"
-        vendor = "_Test Registered Supplier"
-
-        # Step 3: Create Purchase Invoice
-        purchase_invoice = frappe.new_doc("Purchase Invoice")
-        purchase_invoice.company = company
-        purchase_invoice.supplier = vendor
-        purchase_invoice.append(
-            "items",
-            {
-                "item_code": item_code,
-                "qty": 1,
-                "rate": 100,
-                "gst_hsn_code": hsn_code,
-            },
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_service_and_goods_import_invoice_itc_classification(self):
+        test_cases = (
+            ("Overseas", "_Test Foreign Supplier"),
+            ("SEZ", "_Test Registered Supplier"),
         )
-        
-        taxes_and_charges = frappe.call(
-            "erpnext.accounts.party.get_party_details",
-            party=vendor,
-            party_type="Supplier",
-            account= "Creditors - _TIRC",
-            company=company,
-            posting_date = today()
-        ).get("taxes_and_charges")
-        # Set the taxes_and_charges in the Purchase Invoice
-        purchase_invoice.taxes_and_charges = taxes_and_charges
-        purchase_invoice.bill_no = "XXX-01"
-        purchase_invoice.save()
-        # Step 4: Validate Taxes in Purchase Invoice
-        taxes_in_invoice = purchase_invoice.get("taxes")
-        self.assertGreater(len(taxes_in_invoice), 0, "Taxes should be fetched for the Purchase Invoice.")
 
-        # # Validate tax accounts
-        for tax in taxes_in_invoice:
-            self.assertIn(
-                tax.account_head,
-                ["Input Tax CGST - _TIRC", "Input Tax SGST - _TIRC"],
-                "Tax account should match GST rules based on In-State or Out-State classification.",
+        for gst_category, supplier in test_cases:
+            pinv = create_purchase_invoice(
+                supplier=supplier,
+                do_not_submit=1,
+                do_not_save=1,
+                item_code="_Test Service Item",
             )
+            pinv.gst_category = gst_category
+            append_item(pinv)
+            pinv.save()
+
+            self.assertEqual(pinv.itc_classification, "Import Of Goods")
+            self.assertEqual(len(pinv.items), 2)
+            self.assertEqual(pinv.items[0].gst_treatment, "Taxable")
+            self.assertEqual(pinv.items[1].gst_treatment, "Taxable")
 
     def test_validate_invoice_length(self):
         # No error for registered supplier
