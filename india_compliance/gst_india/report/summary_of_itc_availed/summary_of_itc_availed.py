@@ -8,6 +8,7 @@ from frappe import _
 from frappe.query_builder.custom import ConstantColumn
 from frappe.query_builder.functions import IfNull
 
+from india_compliance.gst_india.constants import SERVICE_HSN_PREFIX
 from india_compliance.gst_india.utils.itc_claim import (
     apply_period_filter as _apply_itc_period_filter,
 )

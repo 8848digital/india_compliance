@@ -5,11 +5,8 @@ from itertools import chain
 import frappe
 from frappe.utils import flt
 
+
 from india_compliance.gst_india.constants import SERVICE_HSN_PREFIX, UOM_MAP
-from india_compliance.gst_india.report.gstr_1.gstr_1 import (
-    GSTR1DocumentIssuedSummary,
-    GSTR11A11BData,
-)
 from india_compliance.gst_india.utils import (
     MONTHS,
     get_gst_accounts_by_type,

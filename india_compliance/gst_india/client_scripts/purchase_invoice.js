@@ -22,7 +22,9 @@ frappe.ui.form.on(DOCTYPE, {
         india_compliance.setup_itc_claim_period_query(frm);
     },
 
-    onload: toggle_reverse_charge,
+    onload(frm) {
+        toggle_reverse_charge(frm);
+    },
 
     gst_category(frm) {
         validate_gst_hsn_code(frm);
@@ -54,22 +56,21 @@ frappe.ui.form.on(DOCTYPE, {
             show_sandbox_mode_indicator();
 
         if (
-            frm.doc.docstatus !== 1 ||
-            frm.doc.gst_category !== "Overseas" ||
-            frm.doc.__onload?.bill_of_entry_exists
-        )
-            return;
-
-        frm.add_custom_button(
-            __("Bill of Entry"),
-            () => {
-                frappe.model.open_mapped_doc({
-                    method: "india_compliance.gst_india.doctype.bill_of_entry.bill_of_entry.make_bill_of_entry",
-                    frm: frm,
-                });
-            },
-            __("Create"),
-        );
+            frm.doc.docstatus === 1 &&
+            frm.doc.is_boe_applicable &&
+            frm.doc.__onload?.has_pending_boe_qty
+        ) {
+            frm.add_custom_button(
+                __("Bill of Entry"),
+                () => {
+                    frappe.model.open_mapped_doc({
+                        method: "india_compliance.gst_india.doctype.bill_of_entry.bill_of_entry.make_bill_of_entry",
+                        frm: frm,
+                    });
+                },
+                __("Create"),
+            );
+        }
     },
 
     before_save(frm) {
@@ -115,12 +116,7 @@ function toggle_reverse_charge(frm) {
     let is_read_only = 0;
     if (!is_import_gst_category(frm.doc.gst_category)) is_read_only = 0;
     // has_goods_item
-    else if (
-        frm.doc.items.length > 0 &&
-        frm.doc.items.some(
-            item => item.gst_hsn_code && !item.gst_hsn_code.startsWith("99"),
-        )
-    )
+    else if (has_goods_items(frm))
         is_read_only = 1;
 
     frm.set_df_property("is_reverse_charge", "read_only", is_read_only);

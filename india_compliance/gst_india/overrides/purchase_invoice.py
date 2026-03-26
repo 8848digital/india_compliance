@@ -3,7 +3,11 @@ from frappe import _
 from frappe.model.meta import get_field_precision
 from frappe.utils import flt
 
-from india_compliance.gst_india.constants import GST_TAX_TYPES, VALID_HSN_LENGTHS
+from india_compliance.gst_india.constants import (
+    GST_TAX_TYPES,
+    IMPORT_GST_CATEGORIES,
+    VALID_HSN_LENGTHS,
+)
 from india_compliance.gst_india.overrides.sales_invoice import (
     update_dashboard_with_gst_logs,
 )
@@ -32,12 +36,6 @@ def onload(doc, method=None):
         doc.set_onload(
             "has_pending_boe_qty",
             any(item.pending_boe_qty > 0 for item in doc.items),
-        )
-
-    if doc.docstatus == 1 and doc.get("itc_claim_period"):
-        doc.set_onload(
-            "is_itc_period_filed",
-            _is_gstr3b_filed(doc.company_gstin, doc.itc_claim_period),
         )
 
     if doc.docstatus == 1 and doc.get("itc_claim_period"):
