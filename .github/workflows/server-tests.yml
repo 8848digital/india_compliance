@@ -42,29 +42,29 @@ jobs:
 
         name: Python Unit Tests
 
-        services:
-            mariadb:
-                image: mariadb:10.6
-                env:
-                    MARIADB_ROOT_PASSWORD: 'travis'
-                ports:
-                    - 3306:3306
-                options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: "travis"
+        ports:
+          - 3306:3306
+        options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
         steps:
             - name: Clone
               uses: actions/checkout@v4
 
-            - name: Setup Python
-              uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
 
-            - name: Setup Node
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 20
-                  check-latest: true
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          check-latest: true
 
             - name: Add to Hosts
               run: echo "127.0.0.1 test_site" | sudo tee -a /etc/hosts
