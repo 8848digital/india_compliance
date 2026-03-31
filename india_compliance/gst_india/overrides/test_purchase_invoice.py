@@ -1,9 +1,9 @@
 import re
 
 import frappe
+from erpnext.accounts.doctype.account.test_account import create_account
 from frappe.tests.utils import FrappeTestCase, change_settings
 from frappe.utils import add_months, getdate
-from erpnext.accounts.doctype.account.test_account import create_account
 
 from india_compliance.gst_india.utils.itc_claim import (
     ITC_CLAIM_PERIOD_DEFERRED,
@@ -129,9 +129,7 @@ class TestPurchaseInvoice(FrappeTestCase):
             company=company,
         )
 
-        frappe.db.set_value(
-            "Company", company, "unrealized_profit_loss_account", account
-        )
+        frappe.db.set_value("Company", company, "unrealized_profit_loss_account", account)
         pinv = create_purchase_invoice(
             supplier="Test Internal with ISD Supplier",
             qty=-1,
@@ -326,9 +324,7 @@ class TestPurchaseInvoice(FrappeTestCase):
 
         self.assertRaisesRegex(
             frappe.exceptions.ValidationError,
-            re.compile(
-                r"Cannot change ITC Claim Period from .* to .*\. GSTR-3B already filed for .*\."
-            ),
+            re.compile(r"Cannot change ITC Claim Period from .* to .*\. GSTR-3B already filed for .*\."),
             pinv.save,
         )
 
@@ -338,9 +334,7 @@ class TestPurchaseInvoice(FrappeTestCase):
 
         self.assertRaisesRegex(
             frappe.exceptions.ValidationError,
-            re.compile(
-                r"Cannot change ITC Claim Period from .* to .*\. GSTR-3B already filed for .*\."
-            ),
+            re.compile(r"Cannot change ITC Claim Period from .* to .*\. GSTR-3B already filed for .*\."),
             pinv.save,
         )
 
