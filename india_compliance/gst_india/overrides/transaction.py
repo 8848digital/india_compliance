@@ -1,5 +1,6 @@
 import json
 from collections import defaultdict
+from typing import ClassVar
 
 import frappe
 from frappe import _, bold
@@ -1287,7 +1288,7 @@ def is_export_without_payment_of_gst(doc):
 
 
 class ItemGSTDetails:
-    FIELDMAP = {}
+    FIELDMAP: ClassVar[dict] = {}
 
     def get(self, docs, doctype, company):
         """

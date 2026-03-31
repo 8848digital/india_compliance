@@ -1,5 +1,6 @@
 import json
 import re
+from typing import ClassVar
 
 from parameterized import parameterized_class
 
@@ -1384,7 +1385,7 @@ class TestRegionalOverrides(FrappeTestCase):
 
 
 class TestItemUpdate(FrappeTestCase):
-    DATA = {
+    DATA: ClassVar[dict] = {
         "customer": "_Test Unregistered Customer",
         "item_code": "_Test Trading Goods 1",
         "qty": 1,
