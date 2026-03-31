@@ -178,6 +178,13 @@ def onload(doc, method=None):
 
 
 def validate(doc, method=None):
+    field_map = (
+        STOCK_ENTRY_FIELD_MAP
+        if doc.doctype == "Stock Entry"
+        else SUBCONTRACTING_ORDER_RECEIPT_FIELD_MAP
+    )
+    CustomTaxController(doc, field_map).set_taxes_and_totals()
+
     if ignore_gst_validations_for_subcontracting(doc):
         return
 
@@ -186,13 +193,6 @@ def validate(doc, method=None):
 
     if doc.doctype in ("Stock Entry", "Subcontracting Receipt"):
         validate_transaction_name(doc)
-
-    field_map = (
-        STOCK_ENTRY_FIELD_MAP
-        if doc.doctype == "Stock Entry"
-        else SUBCONTRACTING_ORDER_RECEIPT_FIELD_MAP
-    )
-    CustomTaxController(doc, field_map).set_taxes_and_totals()
 
     set_gst_tax_type(doc)
     validate_taxes(doc)
@@ -398,11 +398,19 @@ def set_address_display(doc):
 
 
 @frappe.whitelist()
-def get_relevant_references(filters=None):
+def get_relevant_references(filters: str | dict | frappe._dict | None = None):
+    """Permission check not required as get_list in called functions checks permissions."""
     if isinstance(filters, str):
         filters = frappe.parse_json(filters)
 
-    receipt_returns = get_subcontracting_receipt_references(filters=filters)
+    receipt_returns = get_subcontracting_receipt_references(
+        filters=filters,
+        doctype=None,
+        txt=None,
+        searchfield=None,
+        start=None,
+        page_len=None,
+    )
     stock_entries = get_stock_entry_references(
         filters=filters, only_linked_references=True
     )
@@ -414,9 +422,16 @@ def get_relevant_references(filters=None):
 
 
 @frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
 def get_subcontracting_receipt_references(
-    doctype=None, txt=None, searchfield=None, start=None, page_len=None, filters=None
+    doctype: str | None = None,
+    txt: str | None = None,
+    searchfield: str | None = None,
+    start: int | None = None,
+    page_len: int | None = None,
+    filters: str | dict | frappe._dict | None = None,
 ):
+    """Permission check not required as get_list checks permissions."""
     filters = frappe._dict(filters)
 
     _filters = [
@@ -435,7 +450,7 @@ def get_subcontracting_receipt_references(
     if txt:
         _filters.append(["name", "like", f"%{txt}%"])
 
-    return frappe.db.get_all(
+    return frappe.get_list(
         "Subcontracting Receipt",
         filters=_filters,
         fields=["name", "posting_date"],
@@ -446,14 +461,15 @@ def get_subcontracting_receipt_references(
 
 @frappe.whitelist()
 def get_stock_entry_references(
-    doctype=None,
-    txt=None,
-    searchfield=None,
-    start=None,
-    page_len=None,
-    filters=None,
-    only_linked_references=False,
+    doctype: str | None = None,
+    txt: str | None = None,
+    searchfield: str | None = None,
+    start: int | None = None,
+    page_len: int | None = None,
+    filters: str | dict | frappe._dict | None = None,
+    only_linked_references: bool = False,
 ):
+    """Permission check not required as get_list checks permissions."""
     filters = frappe._dict(filters)
 
     or_filters = []
@@ -476,7 +492,7 @@ def get_stock_entry_references(
             ["subcontracting_order", "in", filters.subcontracting_orders],
         ]
 
-    return frappe.db.get_all(
+    return frappe.get_list(
         "Stock Entry",
         filters=_filters,
         or_filters=or_filters,

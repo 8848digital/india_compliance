@@ -62,8 +62,7 @@ def make_default_gst_expense_accounts(company):
 
 
 @frappe.whitelist()
-def make_default_tax_templates(company: str, gst_rate=None):
-    frappe.set_user("Administrator")
+def make_default_tax_templates(company: str, gst_rate: float | None = None):
     frappe.has_permission("Company", ptype="write", doc=company, throw=True)
     frappe.set_user(frappe.session.user)
     default_taxes = get_tax_defaults(gst_rate)
@@ -252,7 +251,8 @@ def create_default_company_account(
 
 
 @frappe.whitelist()
-def get_default_print_options(for_bank=1) -> list:
+def get_default_print_options(for_bank: int = 1) -> list:
+    """Permission check not required as this returns static non-sensitive data."""
     if int(for_bank):
         return ["Account No.", "Bank Name", "Branch", "IFSC Code", "UPI ID"]
     else:

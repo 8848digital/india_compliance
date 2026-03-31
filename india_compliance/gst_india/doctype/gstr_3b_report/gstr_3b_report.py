@@ -10,10 +10,15 @@ from openpyxl.cell.cell import MergedCell
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.query_builder import Case
 from frappe.query_builder.functions import IfNull, Sum
 from frappe.utils import cint, cstr, flt, get_first_day, get_last_day
-from frappe.query_builder import Field
-from india_compliance.gst_india.constants import INVOICE_DOCTYPES, STATE_NUMBERS
+
+from india_compliance.gst_india.constants import (
+    INVOICE_DOCTYPES,
+    STATE_NUMBERS,
+    TAXABLE_GST_TREATMENTS,
+)
 from india_compliance.gst_india.overrides.transaction import is_inter_state_supply
 from india_compliance.gst_india.report.gstr_1.gstr_1 import GSTR11A11BData
 from india_compliance.gst_india.report.gstr_3b_details.gstr_3b_details import (
@@ -26,6 +31,9 @@ from india_compliance.gst_india.utils import (
     get_period,
 )
 from india_compliance.gst_india.utils.exporter import ExcelExporter
+from india_compliance.gst_india.utils.itc_claim import (
+    apply_period_filter as _apply_itc_period_filter,
+)
 
 VALUES_TO_UPDATE = ["iamt", "camt", "samt", "csamt"]
 GST_TAX_TYPE_MAP = {
@@ -38,6 +46,22 @@ GST_TAX_TYPE_MAP = {
 
 
 class GSTR3BReport(Document):
+    @property
+    def filing_status(self):
+        status = "Not Filed"
+        if not (self.company_gstin and self.month_or_quarter and self.year):
+            return status
+
+        period = get_period(self.month_or_quarter, self.year)
+        filters = {
+            "gstin": self.company_gstin,
+            "return_period": period,
+            "return_type": "GSTR3B",
+        }
+        status = frappe.db.get_value("GST Return Log", filters, "filing_status")
+
+        return status or "Not Filed"
+
     def validate(self):
         self.json_output = ""
         self.missing_field_invoices = ""
@@ -104,13 +128,22 @@ class GSTR3BReport(Document):
         except Exception as e:
             self.generation_status = "Failed"
             self.db_set({"generation_status": self.generation_status})
-            frappe.db.commit()
+            frappe.db.commit()  # nosemgrep
             raise e
 
         finally:
             frappe.publish_realtime(
                 "gstr3b_report_generation", doctype=self.doctype, docname=self.name
             )
+
+    def apply_itc_period_filter(self, query, doc):
+        return _apply_itc_period_filter(
+            query,
+            doc,
+            self.from_date,
+            self.to_date,
+            filter_by=self.filter_by,
+        )
 
     def set_inward_nil_exempt(self, inward_nil_exempt):
         self.report_dict["inward_sup"]["isup_details"][0]["inter"] = flt(
@@ -156,8 +189,9 @@ class GSTR3BReport(Document):
         ineligible_credit = IneligibleITC(
             self.company,
             self.gst_details.get("gstin"),
-            self.month_or_quarter_no,
-            self.year,
+            self.filter_by,
+            self.from_date,
+            self.to_date,
         ).get_for_purchase(
             "ITC restricted due to PoS rules", group_by="ineligibility_reason"
         )
@@ -168,8 +202,9 @@ class GSTR3BReport(Document):
         ineligible_credit = IneligibleITC(
             self.company,
             self.gst_details.get("gstin"),
-            self.month_or_quarter_no,
-            self.year,
+            self.filter_by,
+            self.from_date,
+            self.to_date,
         ).get_for_purchase(
             "Ineligible As Per Section 17(5)", group_by="ineligibility_reason"
         )
@@ -180,8 +215,9 @@ class GSTR3BReport(Document):
         ineligible_credit = IneligibleITC(
             self.company,
             self.gst_details.get("gstin"),
-            self.month_or_quarter_no,
-            self.year,
+            self.filter_by,
+            self.from_date,
+            self.to_date,
         ).get_for_bill_of_entry()
 
         self.process_ineligible_credit(ineligible_credit)
@@ -267,7 +303,6 @@ class GSTR3BReport(Document):
             .where(
                 (purchase_invoice.docstatus == 1)
                 & (purchase_invoice.is_opening == "No")
-                & (purchase_invoice.posting_date[self.from_date : self.to_date])
                 & (purchase_invoice.company == self.company)
                 & (purchase_invoice.company_gstin == self.company_gstin)
                 & (
@@ -279,10 +314,15 @@ class GSTR3BReport(Document):
                     IfNull(purchase_invoice.ineligibility_reason, "")
                     != "ITC restricted due to PoS rules"
                 )  # Ignore as it is Ineligible for ITC
+                & (purchase_invoice.is_boe_applicable == 0)
             )
             .groupby(purchase_invoice.itc_classification)
-            .run(as_dict=True)
         )
+
+        itc_amounts = self.apply_itc_period_filter(
+            itc_amounts,
+            purchase_invoice,
+        ).run(as_dict=True)
 
         itc_details = {}
         for d in itc_amounts:
@@ -304,26 +344,37 @@ class GSTR3BReport(Document):
         boe = frappe.qb.DocType("Bill of Entry")
         boe_taxes = frappe.qb.DocType("India Compliance Taxes and Charges")
 
-        def _get_tax_amount(account_type):
-            return (
-                frappe.qb.from_(boe)
-                .select(Sum(boe_taxes.tax_amount))
-                .join(boe_taxes)
-                .on(boe_taxes.parent == boe.name)
-                .where(
-                    boe.posting_date[self.from_date : self.to_date]
-                    & boe.company_gstin.eq(self.gst_details.get("gstin"))
-                    & boe.docstatus.eq(1)
-                    & boe_taxes.gst_tax_type.eq(account_type)
-                )
-                .where(boe_taxes.parenttype == "Bill of Entry")
-                .run()
-            )[0][0] or 0
+        query = (
+            frappe.qb.from_(boe)
+            .join(boe_taxes)
+            .on(boe_taxes.parent == boe.name)
+            .select(
+                Sum(
+                    Case()
+                    .when(boe_taxes.gst_tax_type == "igst", boe_taxes.tax_amount)
+                    .else_(0)
+                ).as_("iamt"),
+                Sum(
+                    Case()
+                    .when(
+                        boe_taxes.gst_tax_type.isin(["cess", "cess_non_advol"]),
+                        boe_taxes.tax_amount,
+                    )
+                    .else_(0)
+                ).as_("csamt"),
+            )
+            .where(boe.company_gstin.eq(self.gst_details.get("gstin")))
+            .where(boe.docstatus.eq(1))
+            .where(boe.company.eq(self.company))
+            .where(boe_taxes.parenttype == "Bill of Entry")
+        )
 
-        igst, cess = _get_tax_amount("igst"), _get_tax_amount("cess")
-        itc_details.setdefault("Import Of Goods", {"iamt": 0, "csamt": 0})
-        itc_details["Import Of Goods"]["iamt"] += igst
-        itc_details["Import Of Goods"]["csamt"] += cess
+        query = self.apply_itc_period_filter(query, boe)
+
+        for row in query.run(as_dict=True):
+            itc_details.setdefault("Import Of Goods", {"iamt": 0, "csamt": 0})
+            itc_details["Import Of Goods"]["iamt"] += row.iamt or 0
+            itc_details["Import Of Goods"]["csamt"] += row.csamt or 0
 
     def set_reclaim_of_itc_reversal(self):
         journal_entry = frappe.qb.DocType("Journal Entry")
@@ -350,27 +401,32 @@ class GSTR3BReport(Document):
             self.report_dict["itc_elg"]["itc_inelg"][0][tax_amount_key] += entry.amount
 
     def get_inward_nil_exempt(self, state):
-        inward_nil_exempt = frappe.db.sql(
-            """
-            SELECT p.place_of_supply, p.supplier_address,
-            i.taxable_value, i.gst_treatment
-            FROM `tabPurchase Invoice` p , `tabPurchase Invoice Item` i
-            WHERE p.docstatus = 1 and p.name = i.parent
-            and p.is_opening = 'No'
-            and p.company_gstin != IFNULL(p.supplier_gstin, "")
-            and (i.gst_treatment != 'Taxable' or p.gst_category = 'Registered Composition') and
-            p.posting_date between %s and %s
-            and p.company = %s and p.company_gstin = %s
-            and p.gst_category != "Overseas"
-            """,
-            (
-                self.from_date,
-                self.to_date,
-                self.company,
-                self.gst_details.get("gstin"),
-            ),
-            as_dict=1,
+        pi = frappe.qb.DocType("Purchase Invoice")
+        pi_item = frappe.qb.DocType("Purchase Invoice Item")
+
+        query = (
+            frappe.qb.from_(pi)
+            .join(pi_item)
+            .on(pi.name == pi_item.parent)
+            .select(
+                pi.place_of_supply,
+                pi.supplier_address,
+                pi_item.taxable_value,
+                pi_item.gst_treatment,
+            )
+            .where(pi.docstatus == 1)
+            .where(pi.is_opening == "No")
+            .where(pi.company_gstin != IfNull(pi.supplier_gstin, ""))
+            .where(
+                (pi_item.gst_treatment.notin(TAXABLE_GST_TREATMENTS))
+                | (pi.gst_category == "Registered Composition")
+            )
+            .where(pi.company == self.company)
+            .where(pi.company_gstin == self.gst_details.get("gstin"))
         )
+
+        query = self.apply_itc_period_filter(query, pi)
+        inward_nil_exempt = query.run(as_dict=True)
 
         inward_nil_exempt_details = {
             "gst": {"intra": 0.0, "inter": 0.0},
@@ -489,6 +545,7 @@ class GSTR3BReport(Document):
             party_gstin = invoice.billing_address_gstin
 
         query = frappe.qb.from_(invoice).select(*fields)
+
         query = self.get_query_with_conditions(invoice, query, party_gstin)
 
         if reverse_charge:
@@ -538,35 +595,36 @@ class GSTR3BReport(Document):
             self.report_dict["sup_details"]["osup_det"][key] += totals[key]
 
     def get_query_with_conditions(self, invoice, query, party_gstin):
-        return (
+        query = (
             query.where(invoice.docstatus == 1)
-            .where(invoice.posting_date[self.from_date : self.to_date])
             .where(invoice.company == self.company)
             .where(invoice.company_gstin == self.gst_details.get("gstin"))
             .where(invoice.is_opening == "No")
             .where(invoice.company_gstin != IfNull(party_gstin, ""))
         )
 
+        return self.apply_itc_period_filter(query, invoice)
+
     def get_outward_items(self, doctype):
         if not self.invoice_map:
             return {}
-        table = frappe.qb.DocType(f"{doctype} Item")
-        fields = [
-            table.item_code,
-            table.item_name,
-            table.parent,
-            table.taxable_value,
-            table.gst_treatment,
-        ]
-        for tax in GST_TAX_TYPE_MAP:
-            fields.append(table[f"{tax}_amount"])
 
-        invoice_list = list(self.invoice_map.keys())
+        item_doctype = f"{doctype} Item"
+        item = frappe.qb.DocType(item_doctype)
+
+        tax_fields = [getattr(item, f"{tax}_amount") for tax in GST_TAX_TYPE_MAP]
 
         query = (
-            frappe.qb.from_(table)
-            .select(*fields)
-            .where(table.parent.isin(invoice_list))
+            frappe.qb.from_(item)
+            .select(
+                *tax_fields,
+                item.item_code,
+                item.item_name,
+                item.parent,
+                item.taxable_value,
+                item.gst_treatment,
+            )
+            .where(item.parent.isin(list(self.invoice_map.keys())))
         )
 
         return query.run(as_dict=True)
@@ -684,27 +742,25 @@ class GSTR3BReport(Document):
         missing_field_invoices = []
 
         for doctype in INVOICE_DOCTYPES:
-            party_gstin = (
-                "billing_address_gstin" if doctype == "Sales Invoice" else "supplier_gstin"
-            )
-
             invoice = frappe.qb.DocType(doctype)
+            party_gstin = (
+                invoice.billing_address_gstin
+                if doctype == "Sales Invoice"
+                else invoice.supplier_gstin
+            )
 
             query = (
                 frappe.qb.from_(invoice)
                 .select(invoice.name)
-                .where(
-                    (invoice.docstatus == 1)
-                    & (invoice.is_opening == "No")
-                    & (invoice.posting_date.between(self.from_date, self.to_date))
-                    & (invoice.company == self.company)
-                    & (invoice.place_of_supply.isnull())
-                    & (invoice.company_gstin != IfNull(Field(party_gstin), ""))
-                    & (invoice.gst_category != "Overseas")
-                )
+                .where(invoice.docstatus == 1)
+                .where(invoice.is_opening == "No")
+                .where(invoice.company == self.company)
+                .where(invoice.place_of_supply.isnull())
+                .where(invoice.company_gstin != IfNull(party_gstin, ""))
+                .where(invoice.gst_category != "Overseas")
             )
 
-            docnames = query.run(as_dict=True)
+            docnames = self.apply_itc_period_filter(query, invoice).run(as_dict=True)
 
             for d in docnames:
                 missing_field_invoices.append(d.name)
@@ -743,7 +799,7 @@ def format_values(data, precision=2):
 
 
 @frappe.whitelist()
-def view_report(name):
+def view_report(name: str):
     frappe.has_permission("GSTR 3B Report", throw=True)
 
     json_data = frappe.get_value("GSTR 3B Report", name, "json_output")
@@ -751,7 +807,7 @@ def view_report(name):
 
 
 @frappe.whitelist()
-def make_json(name):
+def make_json(name: str):
     frappe.has_permission("GSTR 3B Report", throw=True)
 
     json_data = frappe.get_value("GSTR 3B Report", name, "json_output")
@@ -761,7 +817,7 @@ def make_json(name):
     frappe.local.response.type = "download"
 
 @frappe.whitelist()
-def download_gstr3b_as_excel(name):
+def download_gstr3b_as_excel(name: str):
     """Download GSTR 3B report as Excel file"""
     frappe.has_permission("GSTR 3B Report", throw=True)
     json_data = frappe.get_value("GSTR 3B Report", name, "json_output")
@@ -888,8 +944,8 @@ class GSTR3BExcelExporter:
         excel.export(file_name)
 
     def _get_filename(self):
-        return f"GSTR-3B-{self.gstin}-{self.month}-{self.fiscal_year}.xlsx"
-    
+        return f"GSTR-3B-{self.gstin}-{self.month}-{self.fiscal_year}"
+
     def _update_worksheet(self, excel):
         self.worksheet = excel.wb[self.WORKSHEET_NAME]
 

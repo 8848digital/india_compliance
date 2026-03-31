@@ -33,6 +33,7 @@ from india_compliance.gst_india.utils import (
     get_hsn_settings,
     get_place_of_supply,
     get_place_of_supply_options,
+    has_gst_taxes,
     is_overseas_doc,
     join_list_with_custom_separators,
     validate_gst_category,
@@ -241,6 +242,7 @@ def validate_mandatory_fields(doc, fields, error_message=None, throw=True):
         frappe.throw(
             error_message.format(bold(_(doc.meta.get_label(field)))),
             title=_("Missing Required Field"),
+            exc=frappe.MandatoryError,
         )
 
 
@@ -697,9 +699,13 @@ def is_inter_state_supply(doc):
     else:
         party_gst_category = doc.gst_category
 
-    return party_gst_category == "SEZ" or (
-        doc.place_of_supply[:2] != get_source_state_code(doc)
-    )
+    if party_gst_category == "SEZ":
+        return True
+
+    if not doc.place_of_supply:
+        return False
+
+    return doc.place_of_supply[:2] != get_source_state_code(doc)
 
 
 def get_source_state_code(doc):
@@ -934,8 +940,11 @@ def update_party_details(party_details, doctype, company):
 
 
 @frappe.whitelist()
-def get_party_details_for_subcontracting(party_details, doctype, company):
+def get_party_details_for_subcontracting(
+    party_details: str | dict | frappe._dict, doctype: str, company: str
+):
     party_details = frappe.parse_json(party_details)
+    frappe.has_permission("Supplier", "read", throw=True)
 
     if doctype == "Stock Entry":
         party_address_field = (
@@ -964,10 +973,15 @@ def get_party_details_for_subcontracting(party_details, doctype, company):
     )
 
 
+# nosemgrep: frappe-semgrep-rules.rules.security.missing-argument-type-hint
 @frappe.whitelist()
 def get_gst_details(
-    party_details, doctype, company, *, update_place_of_supply: bool = False
-    ):
+    party_details: str | dict | frappe._dict,
+    doctype: str,
+    company: str,
+    *,
+    update_place_of_supply: bool = False,
+):
     """
     This function does not check for permissions since it returns insensitive data
     based on already sensitive input (party details)
@@ -1307,6 +1321,11 @@ class ItemGSTDetails:
             return
 
         self.get_item_defaults()
+        self.set_item_defaults()
+
+        if ignore_gst_validations(doc):
+            return
+
         self.set_tax_amount_precisions(doc.doctype)
 
         # To Deprecate
@@ -1327,6 +1346,10 @@ class ItemGSTDetails:
             item_defaults[f"{row}_amount"] = 0
 
         self.item_defaults = item_defaults
+
+    def set_item_defaults(self):
+        for item in self.doc.get("items"):
+            item.update(self.item_defaults.copy())
 
     def set_item_name_wise_tax_details(self):
         """
@@ -1625,9 +1648,20 @@ class ItemGSTTreatment:
             self.set_for_overseas()
             return
 
-        has_gst_accounts = any(row.gst_tax_type in TAX_TYPES for row in self.doc.taxes)
+        if self.doc.get("itc_classification") in (
+            "Import Of Goods",
+            "Import Of Service",
+        ):
+            # NOTE: Import transactions are treated as "Taxable" since the supply is taxable
+            # under GST even when no GST is charged directly (e.g. Import Of Goods settled
+            # via BOE) But there is one more possibliity of classifying import transactions
+            # as "Nil-Rated" when GST is not charged in invoice (unclear case, needs more clarity).
+            # For now, we are treating all import transactions as "Taxable" to avoid any missing GST issues in returns.
+            # This can be revisited if needed.
+            self.set_for_import_transactions()
+            return
 
-        if not has_gst_accounts:
+        if not has_gst_taxes(self.doc):
             self.set_for_no_taxes()
             return
 
@@ -1637,6 +1671,10 @@ class ItemGSTTreatment:
     def set_for_overseas(self):
         for item in self.doc.items:
             item.gst_treatment = "Zero-Rated"
+
+    def set_for_import_transactions(self):
+        for item in self.doc.items:
+            item.gst_treatment = "Taxable"
 
     def set_for_no_taxes(self):
         for item in self.doc.items:
