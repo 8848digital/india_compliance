@@ -122,6 +122,7 @@ def get_tds_category_details(accounts):
                 "entity_type": rule.get("entity_type"),
                 "round_off_tax_amount": rule.get("round_off_tax_amount"),
                 "tax_on_excess_amount": rule.get("tax_on_excess_amount"),
+                "tax_deduction_basis": rule.get("tax_deduction_basis", "Net Total"),
                 "rates": rates,
             }
         )
