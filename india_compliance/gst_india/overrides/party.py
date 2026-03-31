@@ -127,9 +127,7 @@ def update_docs_with_previous_gstin(
                 doc.save()
             except Exception as e:
                 frappe.clear_last_message()
-                frappe.throw(
-                    "Error updating {0} {1}:<br/> {2}".format(doctype, docname, str(e))
-                )
+                frappe.throw(f"Error updating {doctype} {docname}:<br/> {e!s}")
 
     frappe.msgprint(_("GSTIN Updated"), indicator="green", alert=True)
 

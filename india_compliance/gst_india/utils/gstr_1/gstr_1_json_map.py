@@ -938,7 +938,7 @@ class CDNR(GSTR1DataMapper):
         return formatted_items
 
     def format_item_for_gov(self, items, *args):
-        keys = set((self.DEFAULT_ITEM_AMOUNTS.keys()))
+        keys = set(self.DEFAULT_ITEM_AMOUNTS.keys())
         # for credit notes amounts -ve
         for item in items:
             for key, value in item.items():
@@ -2331,7 +2331,7 @@ class BooksDataMapper:
         self, row, prepared_data, multiplier=1
     ):
         advances = {}
-        tax_rate = round(((row["tax_amount"] / row["taxable_value"]) * 100))
+        tax_rate = round((row["tax_amount"] / row["taxable_value"]) * 100)
         key = f"{row['place_of_supply']} - {flt(tax_rate)}"
 
         mapped_dict = prepared_data.setdefault(key, [])

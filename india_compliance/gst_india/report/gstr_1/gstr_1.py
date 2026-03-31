@@ -304,19 +304,15 @@ class Gstr1Report:
 
         conditions = self.get_conditions()
 
-        invoice_data = frappe.db.sql(  # nosemgrep
+        invoice_data = frappe.db.sql(
             f"""
             select
-                {select_columns}
-            from `tab{doctype}` si
-            where docstatus = 1 {where_conditions}
+                {self.select_columns}
+            from `tab{self.doctype}` si
+            where docstatus = 1 {conditions}
             and is_opening = 'No'
             order by posting_date desc
-            """.format(
-                select_columns=self.select_columns,
-                doctype=self.doctype,
-                where_conditions=conditions,
-            ),
+            """,
             self.filters,
             as_dict=1,
         )
@@ -1256,11 +1252,7 @@ class GSTR11A11BData:
         data = {}
         for entry in records:
             taxable_value = flt(entry.taxable_value, 2)
-            tax_rate = (
-                round(((entry.tax_amount / taxable_value) * 100))
-                if taxable_value
-                else 0
-            )
+            tax_rate = round((entry.tax_amount / taxable_value) * 100) if taxable_value else 0
 
             data.setdefault((entry.place_of_supply, tax_rate), [0.0, 0.0])
 
@@ -1569,10 +1561,8 @@ class GSTR1DocumentIssuedSummary:
 
         for doc in data:
             if (
-                doc.amended_from
-                and len(doc.amended_from) != len(doc.name)
-                or doc.amended_from in amended_dict
-            ):
+                doc.amended_from and len(doc.amended_from) != len(doc.name)
+            ) or doc.amended_from in amended_dict:
                 amended_dict[doc.name] = doc
                 data_dict.pop(doc.name)
 
@@ -1622,7 +1612,7 @@ def get_gstr1_json(filters: str, data: str | None = None):
 
 
 def get_json(type_of_business, gstin, data, filters):
-    if data and list(data[-1].values())[0] == "Total":
+    if data and next(iter(data[-1].values())) == "Total":
         data = data[:-1]
 
     res = {}
@@ -2169,7 +2159,7 @@ def download_json_file():
 
     frappe.response["filename"] = (
         frappe.scrub(
-            "{0} {1} {2} {3}".format(
+            "{} {} {} {}".format(
                 data["report_name"],
                 data["report_type"],
                 report_data["gstin"],

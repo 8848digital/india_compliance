@@ -1012,12 +1012,8 @@ def handle_server_errors(settings, doc, document_type, error):
         not settings.sandbox_mode or frappe.flags.in_test
     ):
         document_status = "Auto-Retry"
-        settings.db_set(
-            "is_retry_einv_ewb_generation_pending", 1, update_modified=False
-        )
-        error_message += (
-            " Your {0} generation will be automatically retried every 5 minutes."
-        ).format(document_type)
+        settings.db_set("is_retry_einv_ewb_generation_pending", 1, update_modified=False)
+        error_message += f" Your {document_type} generation will be automatically retried every 5 minutes."
     else:
         error_message += " Please try again after some time."
 
