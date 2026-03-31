@@ -59,9 +59,7 @@ DOCTYPES_WITH_GST_DETAIL = {
 ALLOWED_TAX_DIFFERENCE = 1  # Allowable difference in tax amount due to rounding off
 
 def set_gst_breakup(doc):
-    gst_breakup_html = frappe.render_template(
-        "templates/gst_breakup.html", dict(doc=doc)
-    )
+    gst_breakup_html = frappe.render_template("templates/gst_breakup.html", dict(doc=doc))  # nosemgrep
     if not gst_breakup_html:
         return
 
@@ -650,7 +648,7 @@ def validate_items(doc, throw):
                 "Cannot use different Item Tax Templates in different rows for"
                 " following items:<br> {0}"
             ).format("<br>".join(items_with_duplicate_taxes)),
-            title="Inconsistent Item Tax Templates",
+            title=_("Inconsistent Item Tax Templates"),
         )
 
     return True

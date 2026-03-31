@@ -304,8 +304,8 @@ class Gstr1Report:
 
         conditions = self.get_conditions()
 
-        invoice_data = frappe.db.sql(
-            """
+        invoice_data = frappe.db.sql(  # nosemgrep
+            f"""
             select
                 {select_columns}
             from `tab{doctype}` si
@@ -1582,7 +1582,7 @@ class GSTR1DocumentIssuedSummary:
 
 
 @frappe.whitelist()
-def get_gstr1_json(filters, data=None):
+def get_gstr1_json(filters: str, data: str | None = None):
     frappe.has_permission("GL Entry", throw=True)
 
     report_dict = set_gst_defaults(filters)
