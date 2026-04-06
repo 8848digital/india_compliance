@@ -1,3 +1,5 @@
+import json
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import getdate
@@ -6,6 +8,7 @@ from india_compliance.gst_india.report.gstr_1.gstr_1 import (
     GSTR1DocumentIssuedSummary,
     execute,
     format_data_to_dict,
+    get_gstr1_json,
     get_json,
 )
 from india_compliance.gst_india.utils.tests import (
@@ -98,8 +101,8 @@ class TestGSTR1B2B(FrappeTestCase):
         filters = {
             "company": "_Test Indian Registered Company",
             "company_gstin": "24AAQCA8719H1ZC",
-            "from_date": str(getdate()),
-            "to_date": str(getdate()),
+            "from_date": getdate(),
+            "to_date": getdate(),
             "type_of_business": "B2B",
         }
 
