@@ -92,8 +92,6 @@ AMOUNT_FIELDS = (
     "cess_amount",
     "total_tax",
     "total_amount",
-    "inter",
-    "intra",
 )
 
 
@@ -373,10 +371,9 @@ class GSTR3BInwardInvoices(GSTR3BInwardQuery, GSTR3BSubcategory):
         identified_uom = {}
 
         for invoice in data:
-            self.set_invoice_category(invoice, conditions)
-            if not invoice.get("invoice_category"):
-                continue
-            self.set_invoice_sub_category(invoice, conditions)
+            if not invoice.invoice_sub_category:
+                self.set_invoice_category(invoice, conditions)
+                self.set_invoice_sub_category(invoice, conditions)
 
             invoice.hsn_sub_category = GSTR1_SubCategory.HSN.value
 
@@ -389,9 +386,14 @@ class GSTR3BInwardInvoices(GSTR3BInwardQuery, GSTR3BSubcategory):
             if doctype != "Purchase Invoice" or invoice.invoice_category != "ITC Available":
                 continue
 
-            if self.is_itc_reversed(invoice):
-                reversed_invoice = frappe._dict({**invoice, "invoice_category": "ITC Reversed"})
-                self.set_for_itc_reversed(reversed_invoice)
+            if getattr(self, conditions["ITC Reversed"]["category"], None)(invoice):
+                reversed_invoice = frappe._dict(
+                    {
+                        **invoice,
+                        "invoice_category": "ITC Reversed",
+                        "invoice_sub_category": "As per rules 42 & 43 of CGST Rules and section 17(5)",
+                    }
+                )
                 processed_invoices.append(reversed_invoice)
 
         return processed_invoices
@@ -427,14 +429,14 @@ class GSTR3BInwardInvoices(GSTR3BInwardQuery, GSTR3BSubcategory):
 
     def set_invoice_category(self, invoice, conditions):
         for category, functions in conditions.items():
-            if getattr(self, functions["category"])(invoice):
+            if getattr(self, functions["category"], None)(invoice):
                 invoice.invoice_category = category
                 return
 
     def set_invoice_sub_category(self, invoice, conditions):
         category = invoice.invoice_category
         function = conditions[category]["sub_category"]
-        getattr(self, function)(invoice)
+        getattr(self, function, None)(invoice)
 
     def get_invoice_wise_data(self, invoices):
         invoice_wise_data = {}
@@ -450,9 +452,7 @@ class GSTR3BInwardInvoices(GSTR3BInwardQuery, GSTR3BSubcategory):
                 invoice_wise_data[key] = invoice
             else:
                 for field in AMOUNT_FIELDS:
-                    invoice_wise_data[key][field] = (invoice_wise_data[key].get(field) or 0) + (
-                        invoice.get(field) or 0
-                    )
+                    invoice_wise_data[key][field] += invoice[field]
 
         return list(invoice_wise_data.values())
 
