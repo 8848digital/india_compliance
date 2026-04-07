@@ -1,14 +1,15 @@
 # Copyright (c) 2024, Resilient Tech and Contributors
 # See license.txt
 
+
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 from frappe.utils import getdate
 
 from india_compliance.gst_india.doctype.gst_return_log.gst_return_log import add_comment_to_gst_return_log
 
 
-class TestGSTReturnLog(FrappeTestCase):
+class TestGSTReturnLog(IntegrationTestCase):
     def test_add_comment_creates_log_when_missing(self):
         gstin = "24AAQCA8719H1ZC"
         posting_date = getdate("2099-04-15")
