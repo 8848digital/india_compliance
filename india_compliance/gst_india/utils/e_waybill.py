@@ -35,6 +35,8 @@ from india_compliance.gst_india.constants import (
 )
 from india_compliance.gst_india.constants.e_waybill import (
     ADDRESS_FIELDS,
+    ADDRESS_GSTIN_FIELD_MAP,
+    BUYING_DOCTYPES,
     CANCEL_REASON_CODES,
     CONSIGNMENT_STATUS,
     EXTEND_VALIDITY_REASON_CODES,

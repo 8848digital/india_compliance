@@ -16,10 +16,27 @@ from erpnext.stock.doctype.stock_entry.stock_entry import make_stock_in_entry
 from erpnext.subcontracting.doctype.subcontracting_order.subcontracting_order import (
     make_subcontracting_receipt,
 )
+<<<<<<< HEAD
 from erpnext.subcontracting.doctype.subcontracting_order.test_subcontracting_order import (
     create_subcontracting_order,
 )
 from frappe.tests.utils import FrappeTestCase
+=======
+from frappe.tests import IntegrationTestCase
+
+with mock.patch("frappe.db"), mock.patch("frappe.new_doc"), mock.patch("frappe.get_doc"):
+    from erpnext.controllers.tests.test_subcontracting_controller import get_rm_items
+    from erpnext.manufacturing.doctype.production_plan.test_production_plan import (
+        make_bom,
+    )
+    from erpnext.stock.doctype.purchase_receipt.purchase_receipt import (
+        make_stock_entry as make_se_from_pr,
+    )
+    from erpnext.stock.doctype.stock_entry.stock_entry import make_stock_in_entry
+    from erpnext.subcontracting.doctype.subcontracting_order.test_subcontracting_order import (
+        create_subcontracting_order,
+    )
+>>>>>>> 33675fdd (fix: after mapping of stock entry map correct addresses, gstin and item tax template (#3998))
 
 from india_compliance.gst_india.utils.tests import create_transaction
 
@@ -193,7 +210,8 @@ SERVICE_ITEM = {
 }
 
 
-class TestSubcontractingTransaction(FrappeTestCase):
+
+class TestSubcontractingTransaction(IntegrationTestCase):
     ITEM_WITH_TAX = "Subcontracted SRM Item 1"
     ITEM_WITHOUT_TAX = "Subcontracted SRM Item 2"
     SCO_FG_ITEM = "Subcontracted Item SA1"
@@ -203,6 +221,18 @@ class TestSubcontractingTransaction(FrappeTestCase):
     def setUpClass(cls):
         super().setUpClass()
         create_subcontracting_data()
+
+        # Raw material
+        item = frappe.get_doc("Item", cls.ITEM_WITH_TAX)
+        if not any(d.item_tax_template == cls.TAX_TEMPLATE for d in item.taxes):
+            item.append("taxes", {"item_tax_template": cls.TAX_TEMPLATE, "tax_category": ""})
+            item.save()
+
+        # Finished good
+        fg_item = frappe.get_doc("Item", cls.SCO_FG_ITEM)
+        if not any(d.item_tax_template == cls.TAX_TEMPLATE for d in fg_item.taxes):
+            fg_item.append("taxes", {"item_tax_template": cls.TAX_TEMPLATE, "tax_category": ""})
+            fg_item.save()
 
         frappe.db.set_single_value(
             "GST Settings",
@@ -219,6 +249,23 @@ class TestSubcontractingTransaction(FrappeTestCase):
 
         stock_entry = create_transaction(**doc_args)
         return stock_entry
+
+    def _make_sco(self):
+        po = create_purchase_order(**SERVICE_ITEM, supplier_warehouse="Finished Goods - _TIRC")
+        return create_subcontracting_order(po_name=po.name)
+
+    def _rm_items(self, sco):
+        return [
+            {
+                "main_item_code": row.main_item_code,
+                "rm_item_code": row.rm_item_code,
+                "qty": row.required_qty,
+                "rate": row.rate,
+                "stock_uom": row.stock_uom,
+                "warehouse": row.reserve_warehouse,
+            }
+            for row in sco.supplied_items
+        ]
 
     def test_create_and_update_stock_entry(self):
         # Create a subcontracting transaction
@@ -420,7 +467,7 @@ class TestSubcontractingTransaction(FrappeTestCase):
         self.assertFalse(items_by_code[self.ITEM_WITHOUT_TAX].get("item_tax_template"))
 
 
-class TestAddressMappingAfterMapping(FrappeTestCase):
+class TestAddressMappingAfterMapping(IntegrationTestCase):
     """
     Verifies bill_from_address / bill_to_address and their GSTINs are mapped
     correctly in Stock Entries created via get_mapped_doc from each source doctype.

@@ -30,6 +30,15 @@ ADDRESS_FIELDS = {
     "Stock Entry": stock_entry_address,
     "Subcontracting Receipt": buying_address,
 }
+
+ADDRESS_GSTIN_FIELD_MAP = {
+    "customer_address": "billing_address_gstin",
+    "company_address": "company_gstin",
+    "supplier_address": "supplier_gstin",
+    "billing_address": "company_gstin",
+    "bill_from_address": "bill_from_gstin",
+    "bill_to_address": "bill_to_gstin",
+}
 PERMITTED_DOCTYPES = list(ADDRESS_FIELDS.keys())
 
 CANCEL_REASON_CODES = {
