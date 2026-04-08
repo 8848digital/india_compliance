@@ -14,19 +14,21 @@ from frappe.utils import cint, cstr, flt, get_first_day, get_last_day
 from openpyxl.cell.cell import MergedCell
 
 from india_compliance.gst_india.constants import STATE_NUMBERS
-<<<<<<< HEAD
+
 from india_compliance.gst_india.overrides.transaction import is_inter_state_supply
-<<<<<<< HEAD
+
 from india_compliance.gst_india.report.gstr_1.gstr_1 import GSTR11A11BData
 from india_compliance.gst_india.report.gstr_3b_details.gstr_3b_details import (
     IneligibleITC,
 )
-=======
->>>>>>> 26dbbe72 (refactor: gstr_3b_report)
-=======
+
+
 from india_compliance.gst_india.report.gst_purchase_register.gst_purchase_register import (
     AMOUNT_FIELDS_MAP,
+    SECTION_MAPPING,
+    get_sub_category_summary,
 )
+
 from india_compliance.gst_india.utils import (
     get_data_file_path,
     get_period,
@@ -41,9 +43,11 @@ from india_compliance.gst_india.utils.gstr3b.gstr3b_data import (
 from india_compliance.gst_india.utils.gstr3b.gstr3b_inward_data import (
     GSTR3BInvoices,
 )
-
-
+<<<<<<< HEAD
+>>>>>>> cb4e341c (chore: nitpick comments)
+=======
 from india_compliance.gst_india.utils.gstr_1 import GSTR1_SubCategory
+>>>>>>> 804d8f20 (fix: use data from gst sales and purchase register)
 from india_compliance.gst_india.utils.gstr_1.gstr_1_data import (
     GSTR1Invoices,
     GSTR11A11BData,
@@ -58,12 +62,15 @@ from india_compliance.gst_india.utils.gstr3b.gstr3b_outward import (
 from india_compliance.gst_india.utils.itc_claim import (
     apply_period_filter as _apply_itc_period_filter,
 )
+=======
+>>>>>>> 963ad306 (chore: review changes)
 
+VALUES_TO_UPDATE = ["iamt", "camt", "samt", "csamt"]
 
 # GST categories that need to be reported in section 3.2 (inter-state supplies)
 INTER_STATE_GST_CATEGORIES = frozenset({"Unregistered", "Registered Composition", "UIN Holders"})
 
-
+<<<<<<< HEAD
 # Maps invoice amount fields to JSON key names used in the ITC section
 _ITC_FIELD_MAP = {
     "iamt": "igst_amount",
@@ -73,7 +80,8 @@ _ITC_FIELD_MAP = {
 }
 from typing import ClassVar
 
-
+=======
+>>>>>>> 804d8f20 (fix: use data from gst sales and purchase register)
 # Maps JSON tax keys to GSTR-1 invoice amount field names (cess = total_cess_amount)
 _GSTR1_FIELD_MAP = {
     "iamt": "igst_amount",
@@ -82,13 +90,18 @@ _GSTR1_FIELD_MAP = {
     "csamt": "total_cess_amount",
 }
 
-_CDN_SUB_CATEGORIES = frozenset(
-    {
-        GSTR1_SubCategory.CDNR.value,
-        GSTR1_SubCategory.CDNUR.value,
-    }
-)
-
+# Maps GSTR-1 sub-category directly to GSTR-3B section key, based on the
+# official GSTR-1/1A → GSTR-3B auto-population mapping published by GST Portal:
+#   https://tutorial.gst.gov.in/userguide/returns/GSTR3B.htm
+#
+# CDNR/CDNUR (GSTR-1 tables 9B/9C) are absent because their section depends on
+# the underlying supply type — gst_treatment disambiguates at runtime
+# ("Zero-Rated" CDNs for SEZ/Exports → osup_zero; "Taxable" CDNs → osup_det).
+#
+# NIL_EXEMPT is absent — handled inline to split
+#   3.1(c) osup_nil_exmp (Nil-Rated / Exempted) vs 3.1(e) osup_nongst (Non-GST).
+#
+# SUPECOM_9_5 (ecommerce_supply_type) is handled inline → 3.1.1(i) eco_reg_sup.
 _OUTWARD_SUPPLY_MAP = {
     # 3.1(a) — outward taxable supplies
     # GSTR-1 tables: 4A (B2B), 4B (B2B-RC), 5 (B2CL), 6C (DE), 7A/7B (B2CS)
@@ -106,44 +119,29 @@ _OUTWARD_SUPPLY_MAP = {
     GSTR1_SubCategory.SEZWOP.value: "osup_zero",
 }
 
-# Nil-rated, exempted, and non-GST outward supplies are reported in the same section (3.1(c) / 3.1(e)) in GSTR-3B.
-OUTWARD_NIL_EXEMPT_SECTION_MAPPING = {
-    "Nil-Rated": "osup_nil_exmp",
-    "Exempted": "osup_nil_exmp",
-    "Non-GST": "osup_nongst",
-}
+# CDNR/CDNUR sub-categories that fall back to gst_treatment for section routing
+_CDN_SUB_CATEGORIES = frozenset(
+    {
+        GSTR1_SubCategory.CDNR.value,
+        GSTR1_SubCategory.CDNUR.value,
+    }
+)
 
-SECTION_WISE_TAX_FIELDS_MAP = {
-    "osup_zero": ("iamt", "csamt"),
-    "osup_det": ("iamt", "camt", "samt", "csamt"),
-}
-
-PURCHASE_INVOICE_DOCTYPES = frozenset(["Purchase Invoice", "Bill of Entry", "Journal Entry"])
-
-# Maps each ITC JSON section to its ty → (sub_category, net_sign) entries.
-# net_sign: 1 = add to net ITC, -1 = subtract, 0 = no effect.
-ITC_SECTION_MAP = {
-    "itc_avl": {
-        "IMPG": ("Import Of Goods", 1),
-        "IMPS": ("Import Of Service", 1),
-        "ISRC": ("ITC on Reverse Charge", 1),
-        "ISD": ("Input Service Distributor", 1),
-        "OTH": ("All Other ITC", 1),
-    },
-    "itc_rev": {
-        "RUL": ("As per rules 42 & 43 of CGST Rules and section 17(5)", -1),
-        "OTH": ("Others", -1),
-    },
-    "itc_inelg": {
-        "RUL": ("Reclaim of ITC Reversal", 0),
-        "OTH": ("ITC restricted due to PoS rules", 0),
-    },
-}
-
-# Maps ty value → sub_category for inward nil/exempt (isup_details).
-INWARD_NIL_EXEMPT_MAP = {
-    "GST": "Composition Scheme, Exempted, Nil Rated",
-    "NONGST": "Non-GST",
+# Maps each ITC sub-category to its JSON section key, ty value, and net-ITC sign.
+# net_sign: 1 = add to net ITC, -1 = subtract from net ITC, 0 = no effect on net ITC
+ITC_SUB_CATEGORY_MAP = {
+    # ITC Available
+    "Import Of Goods": ("itc_avl", "IMPG", 1),
+    "Import Of Service": ("itc_avl", "IMPS", 1),
+    "ITC on Reverse Charge": ("itc_avl", "ISRC", 1),
+    "Input Service Distributor": ("itc_avl", "ISD", 1),
+    "All Other ITC": ("itc_avl", "OTH", 1),
+    # ITC Reversed
+    "As per rules 42 & 43 of CGST Rules and section 17(5)": ("itc_rev", "RUL", -1),
+    "Others": ("itc_rev", "OTH", -1),
+    # Ineligible ITC
+    "ITC restricted due to PoS rules": ("itc_inelg", "OTH", 0),
+    "Reclaim of ITC Reversal": ("itc_inelg", "RUL", 0),
 }
 
 # Maps GSTR-3B JSON amount keys to the invoice field names used in the summary
@@ -152,6 +150,12 @@ ITC_AMOUNT_KEYS = {
     "camt": "cgst_amount",
     "samt": "sgst_amount",
     "csamt": "cess_amount",
+}
+
+# Maps inward supply sub-categories to their JSON section list and ty value
+INWARD_SUB_CATEGORY_MAP = {
+    "Composition Scheme, Exempted, Nil Rated": "GST",
+    "Non-GST": "NONGST",
 }
 
 
@@ -301,40 +305,85 @@ class GSTR3BReport(Document):
         return summary
 
     def process_outward_supplies(self):
+        """
+        Populate sections 3.1 (outward supply details), 3.1.1 (e-commerce)
+        and 3.2 (inter-state) from Sales Invoice item-wise data via GSTR1Invoices.
+
+        Uses process_invoices (same as the sales register) to assign invoice
+        sub-categories and ecommerce_supply_type, avoiding duplicate business logic.
+
+        Sub-category → 3B section (from _OUTWARD_SUPPLY_MAP, based on official
+        GSTR-1/1A → GSTR-3B auto-population mapping at GST Portal):
+
+          Table 4A/4B   B2B_REGULAR, B2B_REVERSE_CHARGE  → 3.1(a) osup_det
+          Table 5       B2CL                             → 3.1(a) osup_det
+          Table 6C      DE (Deemed Exports)              → 3.1(a) osup_det
+          Table 7A/7B   B2CS                             → 3.1(a) osup_det
+          Table 14(b)   SUPECOM_52                       → 3.1(a) osup_det
+          Table 6A      EXPWP, EXPWOP                    → 3.1(b) osup_zero
+          Table 6B      SEZWP, SEZWOP                    → 3.1(b) osup_zero
+          Table 8 col2-3 NIL_EXEMPT (Nil/Exempted)       → 3.1(c) osup_nil_exmp
+          Table 8 col4  NIL_EXEMPT (Non-GST)             → 3.1(e) osup_nongst
+          Table 15      SUPECOM_9_5 (ecommerce_supply_type) → 3.1.1(i) eco_reg_sup
+          Table 9B/9C   CDNR/CDNUR — section depends on underlying supply type:
+                          "Zero-Rated" (SEZ/Export CDNs) → osup_zero
+                          "Taxable" (B2B/B2CL CDNs)      → osup_det
+
+        Tax handling per section:
+          osup_det (non-RC) → igst + cgst + sgst + cess accumulated
+          osup_det (RC)     → taxable value only (buyer accounts for tax)
+          osup_zero         → igst + cess only (0 for WOP variants)
+          osup_nil_exmp / osup_nongst / eco_reg_sup → taxable value only
+
+        Section 3.2: only osup_det entries qualify; filtered further by
+        gst_category (Unregistered/Composition/UIN) and igst_amount.
+        """
         gstr1 = GSTR1Invoices(self._get_filters())
         invoices = gstr1.get_invoices_for_item_wise_summary()
         gstr1.process_invoices(invoices)
 
         inter_state_supply = {}
 
-        for invoice in data:
-            category = invoice.get("invoice_category")
-            section = invoice.get("outward_section")
-
-            if not category or not section:
-                continue
-
+        for invoice in invoices:
             taxable_value = invoice.taxable_value or 0
 
-            target = self.report_dict[category][section]
-            target["txval"] += taxable_value
+            if invoice.invoice_sub_category == GSTR1_SubCategory.NIL_EXEMPT.value:
+                section_key = "osup_nongst" if invoice.gst_treatment == "Non-GST" else "osup_nil_exmp"
+                self.report_dict["sup_details"][section_key]["txval"] += taxable_value
+                continue
 
-            tax_fields = OUTWARD_SECTION_TAX_FIELDS.get(section)
-            if tax_fields:
-                for key in tax_fields:
-                    target[key] += invoice.get(GSTR1_FIELD_MAP[key]) or 0
+            if invoice.ecommerce_supply_type == GSTR1_SubCategory.SUPECOM_9_5.value:
+                self.report_dict["eco_dtls"]["eco_reg_sup"]["txval"] += taxable_value
+                continue
 
-            if section == "osup_det":
-                self._accumulate_inter_state(invoice, inter_state_supply)
+            section_key = _OUTWARD_SUPPLY_MAP.get(invoice.invoice_sub_category)
+            if section_key is None:
+                if invoice.invoice_sub_category not in _CDN_SUB_CATEGORIES:
+                    continue
+                section_key = "osup_zero" if invoice.gst_treatment == "Zero-Rated" else "osup_det"
 
-        for (gst_category, _pos), supply_data in inter_state_supply.items():
-            inter_sup_section = INTER_STATE_SECTION_MAP.get(gst_category)
-            if inter_sup_section:
-                self.report_dict["inter_sup"][inter_sup_section].append(supply_data)
+            section = self.report_dict["sup_details"][section_key]
+            section["txval"] += taxable_value
 
-    def _accumulate_inter_state(self, invoice, inter_state_supply):
-        """Collect inter-state supply data for section 3.2."""
-        if not invoice.get(OUTWARD_INTER_STATE_FIELD):
+            if section_key == "osup_det":
+                if not invoice.is_reverse_charge:
+                    for key, field in _GSTR1_FIELD_MAP.items():
+                        section[key] += invoice.get(field) or 0
+                self._update_inter_state_supply(invoice, taxable_value, inter_state_supply)
+
+            elif section_key == "osup_zero":
+                for key in ("iamt", "csamt"):
+                    section[key] += invoice.get(_GSTR1_FIELD_MAP[key]) or 0
+
+        self.set_inter_state_supply(inter_state_supply)
+
+    def _update_inter_state_supply(self, invoice, taxable_value, inter_state_supply):
+        """
+        Collect inter-state supply data for section 3.2.
+        Only Unregistered, Registered Composition and UIN Holder categories qualify.
+        If IGST amount is present, the supply is inter-state.
+        """
+        if invoice.gst_category not in INTER_STATE_GST_CATEGORIES:
             return
 
         igst_amount = invoice.igst_amount or 0
@@ -343,16 +392,17 @@ class GSTR3BReport(Document):
 
         place_of_supply = invoice.place_of_supply or ""
         key = (invoice.gst_category, place_of_supply)
-
-        if key not in inter_state_supply:
-            inter_state_supply[key] = {
+        inter_state_supply.setdefault(
+            key,
+            {
                 "txval": 0.0,
                 "pos": place_of_supply.split("-")[0],
                 "iamt": 0.0,
-            }
-
-        inter_state_supply[key]["txval"] += invoice.taxable_value or 0
-        inter_state_supply[key]["iamt"] += igst_amount
+            },
+        )
+        inter_state_supply[key]["txval"] += taxable_value
+        if not invoice.is_reverse_charge:
+            inter_state_supply[key]["iamt"] += igst_amount
 
     def set_inter_state_supply(self, inter_state_supply):
         inter_state_supply_map = {
@@ -405,29 +455,53 @@ class GSTR3BReport(Document):
     def _update_eligible_itc_section(self, summary):
         """
         Populate table 4 — ITC eligible (4A), reversed (4B), net (4C) and
-        ineligible (4D) — from the sub-category summary.
+        ineligible (4D) — using the purchase register's sub-category summary.
         """
+        all_invoices = []
+        for doctype in ("Purchase Invoice", "Bill of Entry", "Journal Entry"):
+            all_invoices.extend(gstr3b.get_data(doctype, group_by_invoice=True))
+
+        summary = get_sub_category_summary(all_invoices, SECTION_MAPPING["4"], AMOUNT_FIELDS_MAP["4"])
+
         itc_elg = self.report_dict["itc_elg"]
         net_itc = itc_elg["itc_net"]
+        section_lookup = {
+            "itc_avl": {d["ty"]: d for d in itc_elg["itc_avl"]},
+            "itc_rev": {d["ty"]: d for d in itc_elg["itc_rev"]},
+            "itc_inelg": {d["ty"]: d for d in itc_elg["itc_inelg"]},
+        }
 
-        for section_key, ty_map in ITC_SECTION_MAP.items():
-            for entry in itc_elg[section_key]:
-                sub_category, net_sign = ty_map[entry["ty"]]
-                amounts = summary.get(sub_category)
-                if not amounts:
-                    continue
-
-                for json_key, field in ITC_AMOUNT_KEYS.items():
-                    amount = amounts.get(field) or 0
-                    entry[json_key] += amount
-                    net_itc[json_key] += amount * net_sign
-
-    def _update_inward_nil_exempt_section(self, summary):
-        """Populate table 5 — inward nil/exempt (GST) and non-GST supplies."""
-        for entry in self.report_dict["inward_sup"]["isup_details"]:
-            sub_category = INWARD_NIL_EXEMPT_MAP[entry["ty"]]
+        for sub_category, (section_key, ty, net_sign) in ITC_SUB_CATEGORY_MAP.items():
             amounts = summary.get(sub_category)
             if not amounts:
+                continue
+
+            entry = section_lookup[section_key].get(ty)
+            if not entry:
+                continue
+
+            for json_key, field in ITC_AMOUNT_KEYS.items():
+                amount = amounts.get(field) or 0
+                entry[json_key] += amount
+                if net_sign:
+                    net_itc[json_key] += amount * net_sign
+
+    def process_inward_nil_exempt(self, pi_items):
+        """
+        Populate table 5 — inward nil/exempt (GST) and non-GST supplies —
+        using the purchase register's sub-category summary.
+        """
+        summary = get_sub_category_summary(pi_items, SECTION_MAPPING["5"], AMOUNT_FIELDS_MAP["5"])
+        isup_details = self.report_dict["inward_sup"]["isup_details"]
+        entry_by_ty = {d["ty"]: d for d in isup_details}
+
+        for sub_category, ty in INWARD_SUB_CATEGORY_MAP.items():
+            amounts = summary.get(sub_category)
+            if not amounts:
+                continue
+
+            entry = entry_by_ty.get(ty)
+            if not entry:
                 continue
 
             entry["inter"] += amounts.get("inter") or 0
