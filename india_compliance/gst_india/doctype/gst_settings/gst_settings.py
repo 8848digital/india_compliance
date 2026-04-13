@@ -10,7 +10,6 @@ from frappe.utils import add_to_date, getdate
 from india_compliance.gst_india.constants import (
     GST_ACCOUNT_FIELDS,
     GST_PARTY_TYPES,
-    TAXABLE_GST_TREATMENTS,
 )
 from india_compliance.gst_india.constants.custom_fields import (
     E_INVOICE_FIELDS,

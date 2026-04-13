@@ -399,6 +399,7 @@ class TestEInvoice(FrappeTestCase):
     @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Other Charges"})
     def test_generate_e_invoice_with_nil_exempted_item(self):
         """Generate e-Invoice for invoice containing Nil/Exempted items."""
+
         test_data = self.e_invoice_test_data.get("nil_exempted_item")
         si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
 
@@ -450,9 +451,9 @@ class TestEInvoice(FrappeTestCase):
 
         self.assertFalse(frappe.db.get_value("e-Waybill Log", {"reference_name": si.name}, "name"))
 
-    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Other Charges"})
-    def test_request_data_for_nil_only_invoice_with_other_charges(self):
-        """Nil-only invoice: nil items in ItemList with AssAmt=0, item-level OthChrg=value."""
+    @change_settings("GST Settings", {"report_nil_exempted_with_taxable_values": 0})
+    def test_request_data_for_nil_only_invoice_without_taxable_values(self):
+        """Nil-only invoice: all items as OthChrg when setting is disabled; AssVal = 0."""
         test_data = self.e_invoice_test_data.get("nil_exempted_item")
         si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
 
@@ -469,9 +470,8 @@ class TestEInvoice(FrappeTestCase):
 
         self.assertEqual(0, request_data["ValDtls"]["AssVal"])
         self.assertEqual(0, request_data["ValDtls"]["OthChrg"])
-        self.assertEqual(100, request_data["ValDtls"]["TotInvVal"])
 
-    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Taxable Values"})
+    @change_settings("GST Settings", {"report_nil_exempted_with_taxable_values": 1})
     def test_request_data_for_nil_only_invoice_with_taxable_values(self):
         """Nil-only invoice: taxable values reported in item fields when setting is enabled; AssVal = total."""
         test_data = self.e_invoice_test_data.get("nil_exempted_item")
@@ -490,40 +490,10 @@ class TestEInvoice(FrappeTestCase):
 
         self.assertEqual(100, request_data["ValDtls"]["AssVal"])
         self.assertEqual(0, request_data["ValDtls"]["OthChrg"])
-        self.assertEqual(100, request_data["ValDtls"]["TotInvVal"])
 
-    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Do Not Generate"})
-    def test_request_data_for_mixed_invoice_with_do_not_generate(self):
-        """Mixed invoice with Do Not Generate: nil items excluded from ItemList."""
-        test_data = self.e_invoice_test_data.get("nil_exempted_item")
-        si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
-
-        append_item(
-            si,
-            frappe._dict(
-                rate=10,
-                item_tax_template="GST 12% - _TIRC",
-                uom="Nos",
-                gst_hsn_code="61149090",
-                gst_treatment="Taxable",
-            ),
-        )
-        si.save()
-
-        request_data = EInvoiceData(si).get_data()
-
-        self.assertEqual(1, len(request_data["ItemList"]))
-
-        taxable_item = request_data["ItemList"][0]
-        self.assertEqual(12.0, taxable_item["GstRt"])
-        self.assertEqual(10, taxable_item["AssAmt"])
-        self.assertEqual(11.2, taxable_item["TotItemVal"])
-
-        self.assertEqual(10, request_data["ValDtls"]["AssVal"])
-
-    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Other Charges"})
-    def test_request_data_with_nil_exempted_item_as_other_charges(self):
-        """Mixed invoice with Generate with Other Charges: nil items in ItemList with item-level OthChrg."""
+    @change_settings("GST Settings", {"report_nil_exempted_with_taxable_values": 0})
+    def test_request_data_with_nil_exempted_item_without_taxable_values(self):
+        """Nil/Exempted item should not be reported in taxable fields when setting is disabled."""
         test_data = self.e_invoice_test_data.get("nil_exempted_item")
         si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
 
