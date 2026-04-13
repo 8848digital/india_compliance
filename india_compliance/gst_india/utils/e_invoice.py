@@ -637,6 +637,12 @@ class EInvoiceData(GSTTransactionData):
         self.set_party_address_details()
         return self.sanitize_data(self.get_invoice_data())
 
+    def set_item_list(self):
+        self.item_list = []
+
+        for item_details in self.get_all_item_details():
+            self.item_list.append(self.get_item_data(item_details))
+
     def validate_transaction(self):
         super().validate_transaction()
         validate_e_invoice_applicability(self.doc, self.settings)
