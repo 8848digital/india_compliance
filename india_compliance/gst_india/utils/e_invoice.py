@@ -540,6 +540,8 @@ def validate_e_invoice_applicability(doc, gst_settings=None, throw=True):
     if doc.company_gstin == doc.billing_address_gstin:
         return _throw(_("e-Invoice is not applicable for invoices with same company and billing GSTIN"))
 
+    # Nil-Rated/Exempted/Non-GST only invoices are allowed for e-Invoice.
+
     if not (doc.place_of_supply == "96-Other Countries" or doc.billing_address_gstin):
         return _throw(_("e-Invoice is not applicable for B2C invoices"))
 
@@ -548,14 +550,6 @@ def validate_e_invoice_applicability(doc, gst_settings=None, throw=True):
 
     if not gst_settings.enable_e_invoice:
         return _throw(_("e-Invoice is not enabled in GST Settings"))
-
-    if gst_settings.nil_exempt_e_invoice_treatment == "Do Not Generate" and not any(
-        item.gst_treatment in TAXABLE_GST_TREATMENTS for item in doc.items
-    ):
-        return _throw(
-            _("e-Invoice is not applicable for invoice with only Nil-Rated/Exempted/Non-GST items"),
-            exc=NotApplicableError,
-        )
 
     applicability_date = get_e_invoice_applicability_date(doc.company, gst_settings, throw)
 
@@ -570,6 +564,27 @@ def validate_e_invoice_applicability(doc, gst_settings=None, throw=True):
         )
 
     return True
+
+
+def validate_taxable_item(doc, throw=True):
+    """
+    Validates that the document contains at least one GST taxable item.
+
+    If all items are Nil-Rated or Exempted and throw is True, it raises an exception.
+    Otherwise, it simply returns False.
+
+    """
+    # Check if there is at least one taxable item in the document
+    if any(item.gst_treatment in TAXABLE_GST_TREATMENTS for item in doc.items):
+        return True
+
+    if not throw:
+        return
+
+    frappe.throw(
+        _("e-Invoice is not applicable for invoice with only Nil-Rated/Exempted items"),
+        exc=NotApplicableError,
+    )
 
 
 def validate_if_e_invoice_can_be_cancelled(doc, throw=True):
@@ -630,9 +645,9 @@ def get_e_invoice_info(doc):
 class EInvoiceData(GSTTransactionData):
     def get_data(self):
         self.validate_transaction()
-        self.item_details_list = self.get_all_item_details()
         self.set_transaction_details()
         self.set_item_list()
+        self.update_other_charges()
         self.set_transporter_details()
         self.set_party_address_details()
         return self.sanitize_data(self.get_invoice_data())
@@ -642,6 +657,10 @@ class EInvoiceData(GSTTransactionData):
 
         for item_details in self.get_all_item_details():
             self.item_list.append(self.get_item_data(item_details))
+
+    def update_other_charges(self):
+        # Nil/exempted values are now represented at item-level.
+        return
 
     def validate_transaction(self):
         super().validate_transaction()
@@ -688,6 +707,9 @@ class EInvoiceData(GSTTransactionData):
                 }
             )
 
+        if self.doc.is_reverse_charge:
+            item_details["total_value"] = abs(self.rounded(item.taxable_value, 2))
+
         if batch_no := self.sanitize_value(item.batch_no, max_length=20, truncate=False):
             batch_expiry_date = frappe.db.get_value("Batch", item.batch_no, "expiry_date")
             item_details.update(
@@ -696,13 +718,6 @@ class EInvoiceData(GSTTransactionData):
                     "batch_expiry_date": format_date(batch_expiry_date, self.DATE_FORMAT),
                 }
             )
-
-    def update_item_total_value(self, item_details, item):
-        if self.doc.is_reverse_charge:
-            item_details["total_value"] = abs(self.rounded(item.taxable_value, 2))
-            return
-
-        super().update_item_total_value(item_details, item)
 
     def update_transaction_details(self):
         invoice_type = "INV"
@@ -733,6 +748,9 @@ class EInvoiceData(GSTTransactionData):
                 "ecommerce_gstin": self.doc.ecommerce_gstin,
             }
         )
+
+        if self.settings.report_nil_exempted_with_taxable_values:
+            self.transaction_details.total_taxable_value = self.transaction_details.total
 
         self.update_payment_details()
 

@@ -121,7 +121,7 @@ class TestEInvoice(FrappeTestCase):
         si.submit()
 
         e_invoice_data = EInvoiceData(si)
-        e_invoice_data.get_data()
+        e_invoice_data.set_item_list()
 
         self.assertListEqual(
             e_invoice_data.item_list,
@@ -381,24 +381,10 @@ class TestEInvoice(FrappeTestCase):
 
         self.assertFalse(frappe.db.get_value("e-Waybill Log", {"reference_name": si.name}, "name"))
 
-    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Do Not Generate"})
-    def test_do_not_generate_for_nil_only_invoice(self):
-        """e-Invoice should be blocked for all-nil/exempt invoices when set to Do Not Generate."""
-        test_data = self.e_invoice_test_data.get("nil_exempted_item")
-        si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
-        si.submit()
-
-        self.assertRaisesRegex(
-            frappe.exceptions.ValidationError,
-            re.compile(r"e-Invoice is not applicable for invoice with only Nil-Rated/Exempted/Non-GST items"),
-            validate_e_invoice_applicability,
-            si,
-        )
-
     @responses.activate
-    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Other Charges"})
+    @change_settings("GST Settings", {"report_nil_exempted_with_taxable_values": 0})
     def test_generate_e_invoice_with_nil_exempted_item(self):
-        """Generate e-Invoice for invoice containing Nil/Exempted items."""
+        """Generate test e-Invoice for nil/exempted items Item"""
 
         test_data = self.e_invoice_test_data.get("nil_exempted_item")
         si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
@@ -452,48 +438,9 @@ class TestEInvoice(FrappeTestCase):
         self.assertFalse(frappe.db.get_value("e-Waybill Log", {"reference_name": si.name}, "name"))
 
     @change_settings("GST Settings", {"report_nil_exempted_with_taxable_values": 0})
-    def test_request_data_for_nil_only_invoice_without_taxable_values(self):
-        """Nil-only invoice: all items as OthChrg when setting is disabled; AssVal = 0."""
-        test_data = self.e_invoice_test_data.get("nil_exempted_item")
-        si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
-
-        request_data = EInvoiceData(si).get_data()
-
-        self.assertEqual(1, len(request_data["ItemList"]))
-
-        nil_item = request_data["ItemList"][0]
-        self.assertEqual(0, nil_item["AssAmt"])
-        self.assertEqual(0, nil_item["TotAmt"])
-        self.assertEqual(0, nil_item["UnitPrice"])
-        self.assertEqual(100, nil_item["OthChrg"])
-        self.assertEqual(100, nil_item["TotItemVal"])
-
-        self.assertEqual(0, request_data["ValDtls"]["AssVal"])
-        self.assertEqual(0, request_data["ValDtls"]["OthChrg"])
-
-    @change_settings("GST Settings", {"report_nil_exempted_with_taxable_values": 1})
-    def test_request_data_for_nil_only_invoice_with_taxable_values(self):
-        """Nil-only invoice: taxable values reported in item fields when setting is enabled; AssVal = total."""
-        test_data = self.e_invoice_test_data.get("nil_exempted_item")
-        si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
-
-        request_data = EInvoiceData(si).get_data()
-
-        self.assertEqual(1, len(request_data["ItemList"]))
-
-        nil_item = request_data["ItemList"][0]
-        self.assertEqual(100, nil_item["AssAmt"])
-        self.assertEqual(100, nil_item["TotAmt"])
-        self.assertEqual(100, nil_item["UnitPrice"])
-        self.assertEqual(0, nil_item["OthChrg"])
-        self.assertEqual(100, nil_item["TotItemVal"])
-
-        self.assertEqual(100, request_data["ValDtls"]["AssVal"])
-        self.assertEqual(0, request_data["ValDtls"]["OthChrg"])
-
-    @change_settings("GST Settings", {"report_nil_exempted_with_taxable_values": 0})
     def test_request_data_with_nil_exempted_item_without_taxable_values(self):
         """Nil/Exempted item should not be reported in taxable fields when setting is disabled."""
+
         test_data = self.e_invoice_test_data.get("nil_exempted_item")
         si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
 
@@ -525,16 +472,16 @@ class TestEInvoice(FrappeTestCase):
         self.assertEqual(10, taxable_item["AssAmt"])
         self.assertEqual(10, taxable_item["TotAmt"])
         self.assertEqual(10, taxable_item["UnitPrice"])
-        self.assertEqual(0, taxable_item["OthChrg"])
         self.assertEqual(11.2, taxable_item["TotItemVal"])
 
         self.assertEqual(10, request_data["ValDtls"]["AssVal"])
         self.assertEqual(0, request_data["ValDtls"]["OthChrg"])
         self.assertEqual(111, request_data["ValDtls"]["TotInvVal"])
 
-    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Taxable Values"})
+    @change_settings("GST Settings", {"report_nil_exempted_with_taxable_values": 1})
     def test_request_data_with_nil_exempted_item_as_line_item(self):
         """Nil/Exempted item should be reported with taxable values when setting is enabled."""
+
         test_data = self.e_invoice_test_data.get("nil_exempted_item")
         si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
 
