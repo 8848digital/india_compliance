@@ -722,17 +722,17 @@
   {
    "default": "Do Not Generate",
    "depends_on": "eval: doc.enable_e_invoice",
-   "fieldname": "nil_exempt_e_invoice_treatment",
-   "fieldtype": "Select",
-   "label": "Nil / Exempted Items in e-Invoice",
-   "options": "Do Not Generate\nGenerate with Other Charges\nGenerate with Taxable Values"
+   "description": "If enabled, Nil Rated / Exempted / Non-GST items are reported with taxable values.",
+   "fieldname": "report_nil_exempted_with_taxable_values",
+   "fieldtype": "Check",
+   "label": "Report Nil / Exempted Items with Taxable Values"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-05-15 18:15:50.948178",
+ "modified": "2026-04-21 15:26:02.220892",
  "modified_by": "Administrator",
  "module": "GST India",
  "name": "GST Settings",
