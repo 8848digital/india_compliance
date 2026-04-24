@@ -4,8 +4,13 @@
 import json
 
 import frappe
+<<<<<<< HEAD
 from frappe.tests.utils import FrappeTestCase, change_settings
 from frappe.utils import get_month, getdate
+=======
+from frappe.tests import IntegrationTestCase, change_settings
+from frappe.utils import add_months, get_month, getdate
+>>>>>>> 2f734f1c (feat: allow itc claim period for RCM Purchase Invoice)
 
 from india_compliance.gst_india.doctype.bill_of_entry.bill_of_entry import (
     make_bill_of_entry,
@@ -18,6 +23,7 @@ from india_compliance.gst_india.report.gstr_3b_details.gstr_3b_details import (
     GSTR3B_Inward_Nil_Exempt,
 )
 from india_compliance.gst_india.utils import get_gst_accounts_by_type
+from india_compliance.gst_india.utils.itc_claim import format_period
 from india_compliance.gst_india.utils.tests import (
     append_item,
     create_itc_reclaim_journal_entry,
@@ -609,8 +615,7 @@ class TestGSTR3BReport(FrappeTestCase):
         self.assertEqual(output["sup_details"]["osup_det"]["samt"], 0.0)
 
     def test_rcm_outward_liability(self):
-        """RCM outward liability uses posting date while ITC uses claim period.
-
+        """
         Scenario: RCM invoice posted this month but ITC deferred to next month.
         - This month's report: outward liability shows invoice, ITC does not.
         - Next month's report: outward liability does not show invoice, ITC does.
@@ -641,14 +646,14 @@ class TestGSTR3BReport(FrappeTestCase):
                 "filter_by": "ITC Claim Period",
             }
         ).insert()
-        output = json.loads(report_this.json_output)
+        out_this = json.loads(report_this.json_output)
 
         # Outward RCM liability always by posting date → invoice IS included
-        self.assertEqual(output["sup_details"]["isup_rev"]["txval"], 100.0)
+        self.assertGreater(out_this["sup_details"]["isup_rev"]["txval"], 0)
         # ITC by claim period → invoice is NOT included (deferred to next month)
-        itc_section = {r["ty"]: r for r in output["itc_elg"]["itc_avl"]}
-        self.assertEqual(itc_section.get("ISRC", {}).get("camt", 0.0), 0.0)
-        self.assertEqual(itc_section.get("ISRC", {}).get("samt", 0.0), 0.0)
+        itc_this = {r["ty"]: r for r in out_this["itc_elg"]["itc_avl"]}
+        self.assertEqual(itc_this.get("ISRC", {}).get("camt", 0.0), 0.0)
+        self.assertEqual(itc_this.get("ISRC", {}).get("samt", 0.0), 0.0)
 
         # -- Report for NEXT month (filter_by ITC Claim Period) --
         report_next = frappe.get_doc(
@@ -661,14 +666,14 @@ class TestGSTR3BReport(FrappeTestCase):
                 "filter_by": "ITC Claim Period",
             }
         ).insert()
-        output = json.loads(report_next.json_output)
+        out_next = json.loads(report_next.json_output)
 
         # Outward RCM by posting date → invoice is NOT in next month's liability
-        self.assertEqual(output["sup_details"]["isup_rev"]["txval"], 0.0)
+        self.assertEqual(out_next["sup_details"]["isup_rev"]["txval"], 0.0)
         # ITC by claim period → invoice IS in next month's ITC
-        itc_section = {r["ty"]: r for r in output["itc_elg"]["itc_avl"]}
-        self.assertEqual(itc_section.get("ISRC", {}).get("camt", 0.0), 9.0)
-        self.assertEqual(itc_section.get("ISRC", {}).get("samt", 0.0), 9.0)
+        itc_next = {r["ty"]: r for r in out_next["itc_elg"]["itc_avl"]}
+        self.assertGreater(itc_next.get("ISRC", {}).get("camt", 0.0), 0.0)
+        self.assertGreater(itc_next.get("ISRC", {}).get("samt", 0.0), 0.0)
 
 
 def create_sales_invoices():

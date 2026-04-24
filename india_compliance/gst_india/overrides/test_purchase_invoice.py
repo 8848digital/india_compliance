@@ -270,7 +270,8 @@ class TestPurchaseInvoice(FrappeTestCase):
 
     def test_itc_claim_period_for_unregistered_rcm(self):
         """
-        For Unregistered supplier RCM, ITC Claim Period must match the posting period
+        Unregistered RCM ITC Claim Period can be any valid period —
+        not restricted to the posting period.
         """
         pinv = create_purchase_invoice(
             supplier="_Test Unregistered Supplier",
@@ -278,10 +279,12 @@ class TestPurchaseInvoice(FrappeTestCase):
             do_not_submit=True,
         )
 
+        # Setting to "Deferred" must be allowed
         pinv.itc_claim_period = ITC_CLAIM_PERIOD_DEFERRED
         pinv.save()
         self.assertEqual(pinv.itc_claim_period, ITC_CLAIM_PERIOD_DEFERRED)
 
+        # Setting to any future valid period must also be allowed
         pinv.itc_claim_period = "012099"
         pinv.save()
         self.assertEqual(pinv.itc_claim_period, "012099")
