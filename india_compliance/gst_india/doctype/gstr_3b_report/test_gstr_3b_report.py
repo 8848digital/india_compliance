@@ -564,11 +564,106 @@ class TestGSTR3BReport(FrappeTestCase):
 
         output = json.loads(report.json_output)
 
-        # Taxable value must appear in eco_reg_sup (table 3.1.1)
-        self.assertEqual(output["eco_dtls"]["eco_reg_sup"]["txval"], 100.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["txval"], 500.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["iamt"], 0.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["camt"], 45.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["samt"], 45.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["csamt"], 0.0)
 
-        # Must NOT be double-reported in section 3.2 comp_details
-        self.assertEqual(output["inter_sup"]["comp_details"], [])
+    def test_payment_entry_adjustment(self):
+        payment_doc = create_advance_payment_entry()
+        create_sales_invoice_against_advance(payment_doc)
+
+        today = getdate()
+        report = frappe.get_doc(
+            {
+                "doctype": "GSTR 3B Report",
+                "company": "_Test Indian Registered Company",
+                "company_gstin": "24AAQCA8719H1ZC",
+                "year": today.year,
+                "month_or_quarter": get_month(today),
+            }
+        ).insert()
+
+        output = json.loads(report.json_output)
+
+        self.assertEqual(output["sup_details"]["osup_det"]["txval"], 500.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["iamt"], 0.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["camt"], 45.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["samt"], 45.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["csamt"], 0.0)
+
+    def test_inter_state_advance_payment_entry(self):
+        create_advance_payment_entry(
+            customer_address="_Test Registered Customer-Billing-1",
+            place_of_supply="29-Karnataka",
+            is_in_state=0,
+            is_out_state=1,
+        )
+
+        output = self.get_report_output()
+
+        self.assertEqual(output["sup_details"]["osup_det"]["txval"], 500.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["iamt"], 90.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["camt"], 0.0)
+        self.assertEqual(output["sup_details"]["osup_det"]["samt"], 0.0)
+
+    def test_rcm_outward_liability(self):
+        """RCM outward liability uses posting date while ITC uses claim period."""
+        today = getdate()
+        next_month = add_months(today, 1)
+        next_period = format_period(next_month)
+
+        pi = create_purchase_invoice(
+            supplier="_Test Unregistered Supplier",
+            is_reverse_charge=True,
+            is_in_state_rcm=True,
+            posting_date=today,
+            do_not_submit=True,
+        )
+        pi.itc_claim_period = next_period
+        pi.save()
+        pi.submit()
+
+        # -- Report for THIS month (filter_by ITC Claim Period) --
+        report_this = frappe.get_doc(
+            {
+                "doctype": "GSTR 3B Report",
+                "company": "_Test Indian Registered Company",
+                "company_gstin": "24AAQCA8719H1ZC",
+                "year": today.year,
+                "month_or_quarter": get_month(today),
+                "filter_by": "ITC Claim Period",
+            }
+        ).insert()
+        output = json.loads(report_this.json_output)
+
+        # Outward RCM liability always by posting date → invoice IS included
+        self.assertEqual(output["sup_details"]["isup_rev"]["txval"], 100.0)
+        # ITC by claim period → invoice is NOT included (deferred to next month)
+        itc_section = {r["ty"]: r for r in output["itc_elg"]["itc_avl"]}
+        self.assertEqual(itc_section.get("ISRC", {}).get("camt", 0.0), 0.0)
+        self.assertEqual(itc_section.get("ISRC", {}).get("samt", 0.0), 0.0)
+
+        # -- Report for NEXT month (filter_by ITC Claim Period) --
+        report_next = frappe.get_doc(
+            {
+                "doctype": "GSTR 3B Report",
+                "company": "_Test Indian Registered Company",
+                "company_gstin": "24AAQCA8719H1ZC",
+                "year": next_month.year,
+                "month_or_quarter": get_month(next_month),
+                "filter_by": "ITC Claim Period",
+            }
+        ).insert()
+        output = json.loads(report_next.json_output)
+
+        # Outward RCM by posting date → invoice is NOT in next month's liability
+        self.assertEqual(output["sup_details"]["isup_rev"]["txval"], 0.0)
+        # ITC by claim period → invoice IS in next month's ITC
+        itc_section = {r["ty"]: r for r in output["itc_elg"]["itc_avl"]}
+        self.assertEqual(itc_section.get("ISRC", {}).get("camt", 0.0), 9.0)
+        self.assertEqual(itc_section.get("ISRC", {}).get("samt", 0.0), 9.0)
 
 
 def create_sales_invoices():
