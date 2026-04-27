@@ -367,6 +367,9 @@ class TestITCClaim(FrappeTestCase):
         result = _calculate_itc_claim_period(doc, filed=set())
         self.assertEqual(result, "012024")
 
+        result = _calculate_itc_claim_period(doc, filed={"012024"})
+        self.assertEqual(result, "022024")
+
     def test_calc_no_inward_supply(self):
         """No inward supply → uses posting period as start."""
         doc = self._make_doc(posting_date=getdate("2024-01-15"))
