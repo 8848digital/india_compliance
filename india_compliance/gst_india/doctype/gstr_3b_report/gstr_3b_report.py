@@ -27,7 +27,6 @@ from india_compliance.gst_india.report.gstr_3b_details.gstr_3b_details import (
 from india_compliance.gst_india.report.gst_purchase_register.gst_purchase_register import (
     AMOUNT_FIELDS_MAP,
 )
->>>>>>> 804d8f20 (fix: use data from gst sales and purchase register)
 from india_compliance.gst_india.utils import (
     get_data_file_path,
     get_period,
@@ -38,7 +37,7 @@ from india_compliance.gst_india.utils.exporter import ExcelExporter
 from india_compliance.gst_india.utils.gstr3b.gstr3b_data import GSTR3BInvoices
 
 from india_compliance.gst_india.utils.gstr3b.gstr3b_data import (
-=======
+
 from india_compliance.gst_india.utils.gstr3b.gstr3b_inward_data import (
     GSTR3BInvoices,
 )
@@ -59,7 +58,6 @@ from india_compliance.gst_india.utils.gstr3b.gstr3b_outward import (
 from india_compliance.gst_india.utils.itc_claim import (
     apply_period_filter as _apply_itc_period_filter,
 )
-
 
 
 # GST categories that need to be reported in section 3.2 (inter-state supplies)
@@ -119,7 +117,6 @@ SECTION_WISE_TAX_FIELDS_MAP = {
     "osup_zero": ("iamt", "csamt"),
     "osup_det": ("iamt", "camt", "samt", "csamt"),
 }
-
 
 PURCHASE_INVOICE_DOCTYPES = frozenset(["Purchase Invoice", "Bill of Entry", "Journal Entry"])
 
@@ -197,8 +194,8 @@ class GSTR3BReport(Document):
             self.from_date = get_first_day(f"{cint(self.year)}-{self.month_or_quarter_no[0]}-01")
             self.to_date = get_last_day(f"{cint(self.year)}-{self.month_or_quarter_no[1]}-01")
 
-            self._process_outward_itc()
-            self._process_inward_itc()
+            self._process_sales_data()
+            self._process_purchase_data()
 
             self.report_dict = format_values(self.report_dict)
             self.json_output = frappe.as_json(self.report_dict)
@@ -232,17 +229,82 @@ class GSTR3BReport(Document):
             }
         )
 
-    def _process_outward_itc(self):
+    def _process_sales_data(self):
         """
         Tables 3.1 (outward supplies), 3.1.1 (e-commerce), 3.2 (inter-state),
         and 3.3 (advances) — all derived from Sales Invoice data.
         """
-        builder = GSTR3BOutwardInvoices(self._get_filters())
-        data = builder.get_data()
-        self.update_outward_json(data)
+        self.process_outward_supplies()
+        self.set_advances_received_or_adjusted()
 
-    def update_outward_json(self, data):
-        """Accumulate classified outward rows into report_dict sections."""
+    def _process_purchase_data(self):
+        """
+        Tables 3.1(d) (RC inward), 4 (ITC), and 5 (nil/exempt inward)
+        — derived from Purchase Invoice, Bill of Entry, and Journal Entry.
+        """
+        data = self.get_purchase_data()
+
+        summary = self._get_sub_section_wise_summary(data)
+        reverse_charge_summary = self._get_inward_reverse_charge_summary(data)
+
+        self._update_eligible_itc_section(summary)
+        self._update_inward_nil_exempt_section(summary)
+        self._update_inward_reverse_charge_section(reverse_charge_summary)
+
+    def get_purchase_data(self):
+        gstr3b = GSTR3BInvoices(self._get_filters())
+        data = []
+        for doctype in PURCHASE_INVOICE_DOCTYPES:
+            data.extend(gstr3b.get_data(doctype, group_by_invoice=True))
+
+        return data
+
+    def _get_inward_reverse_charge_summary(self, data):
+        """Return inward reverse-charge totals using row-level RC markers."""
+        summary = {
+            "taxable_value": 0,
+            "igst_amount": 0,
+            "cgst_amount": 0,
+            "sgst_amount": 0,
+            "cess_amount": 0,
+        }
+
+        for row in data:
+            is_reverse_charge = bool(row.get("is_reverse_charge"))
+
+            if not is_reverse_charge:
+                continue
+
+            summary["taxable_value"] += row.get("taxable_value") or 0
+            summary["igst_amount"] += row.get("igst_amount") or 0
+            summary["cgst_amount"] += row.get("cgst_amount") or 0
+            summary["sgst_amount"] += row.get("sgst_amount") or 0
+            summary["cess_amount"] += row.get("cess_amount") or 0
+
+        return summary
+
+    def _get_sub_section_wise_summary(self, data):
+        """Return {invoice_sub_category: {amount_field: total}} for all inward data."""
+        amount_fields = ["taxable_value"]
+        for section_fields in AMOUNT_FIELDS_MAP.values():
+            amount_fields.extend(section_fields)
+
+        summary = {}
+        for row in data:
+            cat = row.get("invoice_sub_category")
+            if cat not in summary:
+                summary[cat] = {f: 0 for f in amount_fields}
+
+            for field in amount_fields:
+                summary[cat][field] += row.get(field) or 0
+
+        return summary
+
+    def process_outward_supplies(self):
+        gstr1 = GSTR1Invoices(self._get_filters())
+        invoices = gstr1.get_invoices_for_item_wise_summary()
+        gstr1.process_invoices(invoices)
+
         inter_state_supply = {}
 
         for invoice in data:
@@ -292,42 +354,53 @@ class GSTR3BReport(Document):
         inter_state_supply[key]["txval"] += invoice.taxable_value or 0
         inter_state_supply[key]["iamt"] += igst_amount
 
-    def _process_inward_itc(self):
+    def set_inter_state_supply(self, inter_state_supply):
+        inter_state_supply_map = {
+            "Unregistered": "unreg_details",
+            "Registered Composition": "comp_details",
+            "UIN Holders": "uin_details",
+        }
+
+        for key, value in inter_state_supply.items():
+            section = inter_state_supply_map.get(key[0])
+            if section:
+                self.report_dict["inter_sup"][section].append(value)
+
+    def _update_inward_reverse_charge_section(self, reverse_charge_summary):
+        """Populate section 3.1(d) — inward supplies liable to reverse charge.
+
+        Derived from row-level reverse-charge indicators, not invoice sub-category labels.
         """
-        Tables 4 (ITC) and 5 (nil/exempt inward)
-        — derived from Purchase Invoice, Bill of Entry, and Journal Entry.
-        """
-        data = self.get_purchase_data()
+        section = self.report_dict["sup_details"]["isup_rev"]
+        section["txval"] += reverse_charge_summary.get("taxable_value") or 0
+        for json_key, field in ITC_AMOUNT_KEYS.items():
+            section[json_key] += reverse_charge_summary.get(field) or 0
 
-        summary = self._get_sub_section_wise_summary(data)
+    def _set_advances_received_or_adjusted(self):
+        """Section 3.1(a) of GSTR-3B also includes the difference of advances received and adjusted."""
 
-        self._update_eligible_itc_section(summary)
-        self._update_inward_nil_exempt_section(summary)
+        def update_totals(data, totals, multiplier):
+            for row in data:
+                is_intra_state = row["place_of_supply"][:2] == self.company_gstin[:2]
+                tax_amount = row["tax_amount"] * multiplier
 
-    def get_purchase_data(self):
-        gstr3b = GSTR3BInvoices(self._get_filters())
-        data = []
-        for doctype in PURCHASE_INVOICE_DOCTYPES:
-            data.extend(gstr3b.get_data(doctype, group_by_invoice=True))
+                totals["txval"] += row.taxable_value * multiplier
+                totals["iamt"] += 0 if is_intra_state else tax_amount
+                totals["camt"] += (tax_amount / 2) if is_intra_state else 0
+                totals["samt"] += (tax_amount / 2) if is_intra_state else 0
+                totals["csamt"] += row.cess_amount * multiplier
 
-        return data
+        totals = defaultdict(int)
+        gst_accounts = get_gst_accounts_by_type(self.company, "Output")
+        _class = GSTR11A11BData(self._get_filters(), gst_accounts)
 
-    def _get_sub_section_wise_summary(self, data):
-        """Return {invoice_sub_category: {amount_field: total}} for all inward data."""
-        amount_fields = ["taxable_value"]
-        for section_fields in AMOUNT_FIELDS_MAP.values():
-            amount_fields.extend(section_fields)
+        for method, multiplier in (("get_11A_query", 1), ("get_11B_query", -1)):
+            query = getattr(_class, method)()
+            data = query.run(as_dict=True)
+            update_totals(data, totals, multiplier)
 
-        summary = {}
-        for row in data:
-            cat = row.get("invoice_sub_category")
-            if cat not in summary:
-                summary[cat] = {f: 0 for f in amount_fields}
-
-            for field in amount_fields:
-                summary[cat][field] += row.get(field) or 0
-
-        return summary
+        for key in totals:
+            self.report_dict["sup_details"]["osup_det"][key] += totals[key]
 
     def _update_eligible_itc_section(self, summary):
         """
