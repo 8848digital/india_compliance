@@ -33,53 +33,39 @@ from india_compliance.gst_india.utils import (
     get_period,
 )
 from india_compliance.gst_india.utils.exporter import ExcelExporter
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
+
+
 from india_compliance.gst_india.utils.gstr3b.gstr3b_data import GSTR3BInvoices
-=======
+
 from india_compliance.gst_india.utils.gstr3b.gstr3b_data import (
 =======
 from india_compliance.gst_india.utils.gstr3b.gstr3b_inward_data import (
->>>>>>> 7a468667 (refactor: rename gstr3b data files)
     GSTR3BInvoices,
 )
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> cb4e341c (chore: nitpick comments)
-=======
+
+
 from india_compliance.gst_india.utils.gstr_1 import GSTR1_SubCategory
->>>>>>> 804d8f20 (fix: use data from gst sales and purchase register)
 from india_compliance.gst_india.utils.gstr_1.gstr_1_data import (
     GSTR1Invoices,
     GSTR11A11BData,
-=======
 from india_compliance.gst_india.utils.gstr3b.gstr3b_outward import (
-=======
-from india_compliance.gst_india.utils.gstr3b.gstr3b_outward_data import (
->>>>>>> 24233645 (refactor: rename outward data processing module and update imports)
     GSTR1_FIELD_MAP,
     INTER_STATE_SECTION_MAP,
     OUTWARD_INTER_STATE_FIELD,
     OUTWARD_SECTION_TAX_FIELDS,
     GSTR3BOutwardInvoices,
->>>>>>> 3e649c98 (refactor: move outward data processing into seperate file)
 )
-<<<<<<< HEAD
->>>>>>> 26dbbe72 (refactor: gstr_3b_report)
+
 from india_compliance.gst_india.utils.itc_claim import (
     apply_period_filter as _apply_itc_period_filter,
 )
-=======
->>>>>>> 963ad306 (chore: review changes)
 
-<<<<<<< HEAD
+
+
 # GST categories that need to be reported in section 3.2 (inter-state supplies)
 INTER_STATE_GST_CATEGORIES = frozenset({"Unregistered", "Registered Composition", "UIN Holders"})
 
-<<<<<<< HEAD
+
 # Maps invoice amount fields to JSON key names used in the ITC section
 _ITC_FIELD_MAP = {
     "iamt": "igst_amount",
@@ -89,8 +75,7 @@ _ITC_FIELD_MAP = {
 }
 from typing import ClassVar
 
-=======
->>>>>>> 804d8f20 (fix: use data from gst sales and purchase register)
+
 # Maps JSON tax keys to GSTR-1 invoice amount field names (cess = total_cess_amount)
 _GSTR1_FIELD_MAP = {
     "iamt": "igst_amount",
@@ -135,8 +120,7 @@ SECTION_WISE_TAX_FIELDS_MAP = {
     "osup_det": ("iamt", "camt", "samt", "csamt"),
 }
 
-=======
->>>>>>> 3e649c98 (refactor: move outward data processing into seperate file)
+
 PURCHASE_INVOICE_DOCTYPES = frozenset(["Purchase Invoice", "Bill of Entry", "Journal Entry"])
 
 # Maps each ITC JSON section to its ty → (sub_category, net_sign) entries.
