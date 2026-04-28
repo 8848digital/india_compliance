@@ -5,11 +5,7 @@
 import calendar
 import json
 import os
-<<<<<<< HEAD
 from collections import defaultdict
-=======
-from typing import ClassVar
->>>>>>> bff54b15 (refactor: changes as per review)
 
 import frappe
 from frappe import _
@@ -18,7 +14,6 @@ from frappe.utils import cint, cstr, flt, get_first_day, get_last_day
 from openpyxl.cell.cell import MergedCell
 
 from india_compliance.gst_india.constants import STATE_NUMBERS
-<<<<<<< HEAD
 <<<<<<< HEAD
 from india_compliance.gst_india.overrides.transaction import is_inter_state_supply
 <<<<<<< HEAD
@@ -33,8 +28,6 @@ from india_compliance.gst_india.report.gst_purchase_register.gst_purchase_regist
     AMOUNT_FIELDS_MAP,
 )
 >>>>>>> 804d8f20 (fix: use data from gst sales and purchase register)
-=======
->>>>>>> bff54b15 (refactor: changes as per review)
 from india_compliance.gst_india.utils import (
     get_data_file_path,
     get_period,
@@ -49,15 +42,8 @@ from india_compliance.gst_india.utils.gstr3b.gstr3b_data import GSTR3BInvoices
 from india_compliance.gst_india.utils.gstr3b.gstr3b_data import (
 =======
 from india_compliance.gst_india.utils.gstr3b.gstr3b_inward_data import (
-<<<<<<< HEAD
 >>>>>>> 7a468667 (refactor: rename gstr3b data files)
     GSTR3BInvoices,
-=======
-    INWARD_ITC_SECTION_MAP,
-    INWARD_NIL_EXEMPT_SECTION_MAP,
-    ITC_AMOUNT_KEYS,
-    GSTR3BInwardInvoices,
->>>>>>> bff54b15 (refactor: changes as per review)
 )
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -120,7 +106,6 @@ _CDN_SUB_CATEGORIES = frozenset(
     }
 )
 
-<<<<<<< HEAD
 _OUTWARD_SUPPLY_MAP = {
     # 3.1(a) — outward taxable supplies
     # GSTR-1 tables: 4A (B2B), 4B (B2B-RC), 5 (B2CL), 6C (DE), 7A/7B (B2CS)
@@ -188,8 +173,6 @@ ITC_AMOUNT_KEYS = {
     "csamt": "cess_amount",
 }
 
-=======
->>>>>>> bff54b15 (refactor: changes as per review)
 
 class GSTR3BReport(Document):
     @property
@@ -267,38 +250,44 @@ class GSTR3BReport(Document):
 
     def _process_outward_itc(self):
         """
-        Tables 3.1 (outward supplies), 3.1.1 (e-commerce), 3.2 (inter-state), and 3.3
-        (advances) — derived from Sales Invoice, reverse-charge Purchase Invoice, and
-        Payment Entry advance adjustments.
+        Tables 3.1 (outward supplies), 3.1.1 (e-commerce), 3.2 (inter-state),
+        and 3.3 (advances) — all derived from Sales Invoice data.
         """
-        outward_data = GSTR3BOutwardInvoices(self._get_filters()).get_data()
-        self.update_outward_json(outward_data)
+        builder = GSTR3BOutwardInvoices(self._get_filters())
+        data = builder.get_data()
+        self.update_outward_json(data)
 
     def update_outward_json(self, data):
+        """Accumulate classified outward rows into report_dict sections."""
         inter_state_supply = {}
 
         for invoice in data:
-            section_key = invoice.get("outward_section_key")
+            category = invoice.get("invoice_category")
             section = invoice.get("outward_section")
 
-            if not section_key or not section:
+            if not category or not section:
                 continue
 
-            target = self.report_dict[section_key][section]
-            target["txval"] += invoice.taxable_value or 0
+            taxable_value = invoice.taxable_value or 0
 
-            for key in OUTWARD_SECTION_TAX_FIELDS.get(section, ()):
-                target[key] += invoice.get(GSTR1_FIELD_MAP[key]) or 0
+            target = self.report_dict[category][section]
+            target["txval"] += taxable_value
+
+            tax_fields = OUTWARD_SECTION_TAX_FIELDS.get(section)
+            if tax_fields:
+                for key in tax_fields:
+                    target[key] += invoice.get(GSTR1_FIELD_MAP[key]) or 0
 
             if section == "osup_det":
-                self._accumulate_inter_state_supply(invoice, inter_state_supply)
+                self._accumulate_inter_state(invoice, inter_state_supply)
 
         for (gst_category, _pos), supply_data in inter_state_supply.items():
             inter_sup_section = INTER_STATE_SECTION_MAP.get(gst_category)
             if inter_sup_section:
                 self.report_dict["inter_sup"][inter_sup_section].append(supply_data)
 
-    def _accumulate_inter_state_supply(self, invoice, inter_state_supply):
+    def _accumulate_inter_state(self, invoice, inter_state_supply):
+        """Collect inter-state supply data for section 3.2."""
         if not invoice.get(OUTWARD_INTER_STATE_FIELD):
             return
 
@@ -324,52 +313,68 @@ class GSTR3BReport(Document):
         Tables 4 (ITC) and 5 (nil/exempt inward)
         — derived from Purchase Invoice, Bill of Entry, and Journal Entry.
         """
-        inward_invoices = GSTR3BInwardInvoices(self._get_filters())
-        inward_data = inward_invoices.get_all_data(group_by_invoice=True)
+        data = self.get_purchase_data()
 
-        self.update_inward_json(inward_data)
+        summary = self._get_sub_section_wise_summary(data)
 
-    def update_inward_json(self, data):
+        self._update_eligible_itc_section(summary)
+        self._update_inward_nil_exempt_section(summary)
+
+    def get_purchase_data(self):
+        gstr3b = GSTR3BInvoices(self._get_filters())
+        data = []
+        for doctype in PURCHASE_INVOICE_DOCTYPES:
+            data.extend(gstr3b.get_data(doctype, group_by_invoice=True))
+
+        return data
+
+    def _get_sub_section_wise_summary(self, data):
+        """Return {invoice_sub_category: {amount_field: total}} for all inward data."""
+        amount_fields = ["taxable_value"]
+        for section_fields in AMOUNT_FIELDS_MAP.values():
+            amount_fields.extend(section_fields)
+
+        summary = {}
+        for row in data:
+            cat = row.get("invoice_sub_category")
+            if cat not in summary:
+                summary[cat] = {f: 0 for f in amount_fields}
+
+            for field in amount_fields:
+                summary[cat][field] += row.get(field) or 0
+
+        return summary
+
+    def _update_eligible_itc_section(self, summary):
+        """
+        Populate table 4 — ITC eligible (4A), reversed (4B), net (4C) and
+        ineligible (4D) — from the sub-category summary.
+        """
         itc_elg = self.report_dict["itc_elg"]
-        itc_index = {
-            section: {row["ty"]: row for row in rows}
-            for section, rows in itc_elg.items()
-            if isinstance(rows, list)
-        }
-        inward_sup_index = {row["ty"]: row for row in self.report_dict["inward_sup"]["isup_details"]}
+        net_itc = itc_elg["itc_net"]
 
-        for invoice in data:
-            if invoice.get("invoice_category") in INWARD_NIL_EXEMPT_SECTION_MAP:
-                self._update_inward_nil_exempt_section(invoice, inward_sup_index)
-            else:
-                self._update_eligible_itc_section(invoice, itc_index, itc_elg["itc_net"])
+        for section_key, ty_map in ITC_SECTION_MAP.items():
+            for entry in itc_elg[section_key]:
+                sub_category, net_sign = ty_map[entry["ty"]]
+                amounts = summary.get(sub_category)
+                if not amounts:
+                    continue
 
-    def _update_eligible_itc_section(self, invoice, itc_index, net_itc):
-        section_data = INWARD_ITC_SECTION_MAP.get(invoice.get("invoice_sub_category"))
-        if not section_data:
-            return
+                for json_key, field in ITC_AMOUNT_KEYS.items():
+                    amount = amounts.get(field) or 0
+                    entry[json_key] += amount
+                    net_itc[json_key] += amount * net_sign
 
-        section_key, ty, net_sign = section_data
-        entry = itc_index.get(section_key, {}).get(ty)
-        if not entry:
-            return
+    def _update_inward_nil_exempt_section(self, summary):
+        """Populate table 5 — inward nil/exempt (GST) and non-GST supplies."""
+        for entry in self.report_dict["inward_sup"]["isup_details"]:
+            sub_category = INWARD_NIL_EXEMPT_MAP[entry["ty"]]
+            amounts = summary.get(sub_category)
+            if not amounts:
+                continue
 
-        for json_key, field in ITC_AMOUNT_KEYS.items():
-            amount = invoice.get(field) or 0
-            entry[json_key] += amount
-            net_itc[json_key] += amount * net_sign
-
-    def _update_inward_nil_exempt_section(self, invoice, inward_sup_index):
-        ty = INWARD_NIL_EXEMPT_SECTION_MAP.get(invoice.get("invoice_sub_category"))
-        if not ty:
-            return
-
-        entry = inward_sup_index.get(ty)
-        if not entry:
-            return
-
-        entry["inter"] += invoice.get("inter") or 0
-        entry["intra"] += invoice.get("intra") or 0
+            entry["inter"] += amounts.get("inter") or 0
+            entry["intra"] += amounts.get("intra") or 0
 
 
 def get_json(template):
@@ -478,7 +483,6 @@ class GSTR3BExcelExporter:
     }
 
     # Section 3.1 - Tax columns
-    # No need to add sgst as it is formula field
     TAX_COLUMNS: ClassVar[dict] = {
         "txval": 3,
         "iamt": 4,
@@ -524,7 +528,6 @@ class GSTR3BExcelExporter:
     }
 
     COLUMN_SETS: ClassVar[dict] = {
-        # no need to sgst because it is formula field
         "tax": ["txval", "iamt", "camt", "csamt"],
         "itc": ["iamt", "camt", "csamt"],
         "import_itc": ["iamt", "csamt"],
