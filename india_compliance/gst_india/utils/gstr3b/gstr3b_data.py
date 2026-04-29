@@ -344,13 +344,8 @@ class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
                 continue
 
             if getattr(self, conditions["ITC Reversed"]["category"], None)(invoice):
-                reversed_invoice = frappe._dict(
-                    {
-                        **invoice,
-                        "invoice_category": "ITC Reversed",
-                        "invoice_sub_category": "As per rules 42 & 43 of CGST Rules and section 17(5)",
-                    }
-                )
+                reversed_invoice = frappe._dict({**invoice, "invoice_category": "ITC Reversed"})
+                self.set_for_itc_reversed(reversed_invoice)
                 processed_invoices.append(reversed_invoice)
 
         return processed_invoices
