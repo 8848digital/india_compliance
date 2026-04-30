@@ -335,7 +335,11 @@ class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
 
             invoice.hsn_sub_category = GSTR1_SubCategory.HSN.value
 
-            self.update_tax_values(invoice)
+            if invoice.invoice_category in (
+                "Composition Scheme, Exempted, Nil Rated",
+                "Non-GST",
+            ):
+                self.update_tax_values(invoice)
 
             self.process_uom(invoice, identified_uom)
             processed_invoices.append(invoice)
