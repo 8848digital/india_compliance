@@ -58,7 +58,9 @@ class GSTR3BReport(Document):
 
     def validate(self):
         self.json_output = ""
-        self.missing_field_invoices = ""
+        if not self.company_gstin:
+            frappe.throw(_("Please enter GSTIN for Company {0}").format(self.company))
+
         self.generation_status = "In Process"
 
         if self.enqueue_report:
@@ -536,129 +538,73 @@ class GSTR3BReport(Document):
                 "company_gstin": self.company_gstin,
                 "from_date": self.from_date,
                 "to_date": self.to_date,
+                "filter_by": self.filter_by,
             }
         )
 
-        totals = defaultdict(int)
-        gst_accounts = get_gst_accounts_by_type(self.company, "Output")
-        _class = GSTR11A11BData(filters, gst_accounts)
+    def _process_outward_itc(self):
+        """
+        Tables 3.1 (outward supplies), 3.1.1 (e-commerce), 3.2 (inter-state), and 3.3
+        (advances)
+        """
+        outward_data = GSTR3BOutwardInvoices(self._get_filters()).get_data(group_by_invoice=True)
+        self.update_outward_json(outward_data)
 
-        for method, multiplier in (("get_11A_query", 1), ("get_11B_query", -1)):
-            query = getattr(_class, method)()
-            data = query.run(as_dict=True)
-            update_totals(data, totals, multiplier)
+    def update_outward_json(self, data):
+        inter_state_supply = {}
 
-        for key in totals:
-            self.report_dict["sup_details"]["osup_det"][key] += totals[key]
+        for invoice in data:
+            invoice_category = invoice.get("invoice_category")
+            invoice_sub_category = invoice.get("invoice_sub_category")
 
-    def get_query_with_conditions(self, invoice, query, party_gstin):
-        query = (
-            query.where(invoice.docstatus == 1)
-            .where(invoice.company == self.company)
-            .where(invoice.company_gstin == self.gst_details.get("gstin"))
-            .where(invoice.is_opening == "No")
-            .where(invoice.company_gstin != IfNull(party_gstin, ""))
-        )
+            if not invoice_category or not invoice_sub_category:
+                continue
 
-        return self.apply_itc_period_filter(query, invoice)
+            section_key = OUTWARD_CATEGORY_MAP[invoice_category]
+            row_key = OUTWARD_SUB_CATEGORY_MAP[invoice_sub_category]
+            target = self.report_dict[section_key][row_key]
+            target["txval"] += invoice.taxable_value or 0
 
-    def get_outward_items(self, doctype):
-        if not self.invoice_map:
-            return {}
+            for key in OUTWARD_SECTION_TAX_FIELDS.get(row_key, ()):
+                target[key] += invoice.get(GSTR1_FIELD_MAP[key]) or 0
 
-        item_doctype = f"{doctype} Item"
-        item = frappe.qb.DocType(item_doctype)
+            if row_key == "osup_det":
+                self._accumulate_inter_state_supply(invoice, inter_state_supply)
 
-        tax_fields = [getattr(item, f"{tax}_amount") for tax in GST_TAX_TYPE_MAP]
+        for (gst_category, _pos), supply_data in inter_state_supply.items():
+            inter_sup_section = INTER_STATE_SECTION_MAP.get(gst_category)
+            if inter_sup_section:
+                self.report_dict["inter_sup"][inter_sup_section].append(supply_data)
 
-        query = (
-            frappe.qb.from_(item)
-            .select(
-                *tax_fields,
-                item.item_code,
-                item.item_name,
-                item.parent,
-                item.taxable_value,
-                item.gst_treatment,
-            )
-            .where(item.parent.isin(list(self.invoice_map.keys())))
-        )
+    def _accumulate_inter_state_supply(self, invoice, inter_state_supply):
+        if not invoice.get(OUTWARD_INTER_STATE_FIELD):
+            return
 
-        return query.run(as_dict=True)
+        igst_amount = invoice.igst_amount or 0
+        if not igst_amount:
+            return
 
-    def set_outward_taxable_supplies(self):
-        inter_state_supply_details = {}
-        gst_treatment_map = {
-            "Nil-Rated": "osup_nil_exmp",
-            "Exempted": "osup_nil_exmp",
-            "Zero-Rated": "osup_zero",
-            "Non-GST": "osup_nongst",
-            "Taxable": "osup_det",
-        }
+        place_of_supply = invoice.place_of_supply or ""
+        key = (invoice.gst_category, place_of_supply)
 
-        for inv, invoice_details in self.invoice_map.items():
-            gst_treatment_details = self.invoice_item_wise_tax_details.get(inv, {})
-            gst_category = invoice_details.get("gst_category")
-            place_of_supply = invoice_details.get("place_of_supply") or "00-Other Territory"
+        if key not in inter_state_supply:
+            inter_state_supply[key] = {
+                "txval": 0.0,
+                "pos": place_of_supply.split("-")[0],
+                "iamt": 0.0,
+            }
 
-            doc = frappe._dict(
-                {
-                    "gst_category": gst_category,
-                    "place_of_supply": place_of_supply,
-                    "company_gstin": self.gst_details.get("gstin"),
-                }
-            )
+        inter_state_supply[key]["txval"] += invoice.taxable_value or 0
+        inter_state_supply[key]["iamt"] += igst_amount
 
-            is_inter_state = is_inter_state_supply(doc)
+    def _process_inward_itc(self):
+        """
+        Tables 4 (ITC) and 5 (nil/exempt inward)
+        """
+        inward_invoices = GSTR3BInwardInvoices(self._get_filters())
+        inward_data = inward_invoices.get_all_data(group_by_invoice=True)
 
-            for gst_treatment, details in gst_treatment_details.items():
-                gst_treatment_section = gst_treatment_map.get(gst_treatment)
-                section = self.report_dict["sup_details"][gst_treatment_section]
-
-                taxable_value = details.get("taxable_value")
-
-                # updating taxable value and tax value
-                section["txval"] += taxable_value
-                for key in section:
-                    if key in VALUES_TO_UPDATE:
-                        section[key] += details.get(key, 0)
-
-                # section 3.2 details
-                if not gst_treatment == "Taxable":
-                    continue
-
-                if (
-                    gst_category
-                    in [
-                        "Unregistered",
-                        "Registered Composition",
-                        "UIN Holders",
-                    ]
-                    and is_inter_state
-                ):
-                    inter_state_supply_details.setdefault(
-                        (gst_category, place_of_supply),
-                        {
-                            "txval": 0.0,
-                            "pos": place_of_supply.split("-")[0],
-                            "iamt": 0.0,
-                        },
-                    )
-
-                    inter_state_supply_details[(gst_category, place_of_supply)]["txval"] += taxable_value
-                    inter_state_supply_details[(gst_category, place_of_supply)]["iamt"] += details.get("iamt")
-
-        self.set_inter_state_supply(inter_state_supply_details)
-
-    def set_supplies_liable_to_reverse_charge(self):
-        section = self.report_dict["sup_details"]["isup_rev"]
-        for inv, invoice_details in self.invoice_map.items():
-            gst_treatment_section = self.invoice_item_wise_tax_details.get(inv, {})
-            for item in gst_treatment_section.values():
-                section["txval"] += item.get("taxable_value")
-                for key in section:
-                    if key in VALUES_TO_UPDATE:
-                        section[key] += item.get(key, 0)
+        self.update_inward_json(inward_data)
 
     def set_inter_state_supply(self, inter_state_supply):
         inter_state_supply_map = {
