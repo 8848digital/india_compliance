@@ -334,11 +334,8 @@ class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
                 self.set_invoice_sub_category(invoice, conditions)
 
             invoice.hsn_sub_category = GSTR1_SubCategory.HSN.value
-            if invoice.invoice_category in (
-                "Composition Scheme, Exempted, Nil Rated",
-                "Non-GST",
-            ):
-                self.update_tax_values(invoice)
+
+            self.update_tax_values(invoice)
 
             self.process_uom(invoice, identified_uom)
             processed_invoices.append(invoice)
@@ -360,17 +357,24 @@ class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
 
     def update_tax_values(self, invoice):
         inter = intra = 0
+        invoice_type = ""
 
-        if is_inter_state_supply(invoice):
-            inter = invoice.taxable_value
-        else:
-            intra = invoice.taxable_value
+        if invoice.invoice_category in (
+            "Composition Scheme, Exempted, Nil Rated",
+            "Non-GST",
+        ):
+            if is_inter_state_supply(invoice):
+                inter = invoice.taxable_value
+                invoice_type = "Inter State"
+            else:
+                intra = invoice.taxable_value
+                invoice_type = "Intra State"
 
         invoice.update(
             {
                 "inter": inter,
                 "intra": intra,
-                "invoice_type": "Inter State" if inter else "Intra State",
+                "invoice_type": invoice_type,
             }
         )
 
