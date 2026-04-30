@@ -5,7 +5,7 @@
 import calendar
 import json
 import os
-from collections import defaultdict
+from typing import ClassVar
 
 import frappe
 from frappe import _
@@ -15,34 +15,28 @@ from frappe.query_builder.functions import IfNull, Sum
 from frappe.utils import cint, cstr, flt, get_first_day, get_last_day
 from openpyxl.cell.cell import MergedCell
 
-from india_compliance.gst_india.constants import (
-    INVOICE_DOCTYPES,
-    STATE_NUMBERS,
-    TAXABLE_GST_TREATMENTS,
-)
-from india_compliance.gst_india.overrides.transaction import is_inter_state_supply
-from india_compliance.gst_india.report.gstr_1.gstr_1 import GSTR11A11BData
-from india_compliance.gst_india.report.gstr_3b_details.gstr_3b_details import (
-    IneligibleITC,
-)
+from india_compliance.gst_india.constants import STATE_NUMBERS
 from india_compliance.gst_india.utils import (
     get_data_file_path,
     get_gst_accounts_by_type,
     get_period,
 )
 from india_compliance.gst_india.utils.exporter import ExcelExporter
-from india_compliance.gst_india.utils.itc_claim import (
-    apply_period_filter as _apply_itc_period_filter,
+from india_compliance.gst_india.utils.gstr3b.gstr3b_inward_data import (
+    INWARD_ITC_SECTION_MAP,
+    INWARD_NIL_EXEMPT_SECTION_MAP,
+    ITC_AMOUNT_KEYS,
+    GSTR3BInwardInvoices,
 )
-
-VALUES_TO_UPDATE = ["iamt", "camt", "samt", "csamt"]
-GST_TAX_TYPE_MAP = {
-    "sgst": "samt",
-    "cgst": "camt",
-    "igst": "iamt",
-    "cess": "csamt",
-    "cess_non_advol": "csamt",
-}
+from india_compliance.gst_india.utils.gstr3b.gstr3b_outward_data import (
+    GSTR1_FIELD_MAP,
+    INTER_STATE_SECTION_MAP,
+    OUTWARD_CATEGORY_MAP,
+    OUTWARD_INTER_STATE_FIELD,
+    OUTWARD_SECTION_TAX_FIELDS,
+    OUTWARD_SUB_CATEGORY_MAP,
+    GSTR3BOutwardInvoices,
+)
 
 
 class GSTR3BReport(Document):
