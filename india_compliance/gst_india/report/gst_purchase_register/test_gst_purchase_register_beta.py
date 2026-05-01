@@ -249,3 +249,51 @@ class TestGSTPurchaseRegisterITCJournalEntries(FrappeTestCase):
         self.assertIn(p1.name, voucher_nos)
         self.assertIn(p2.name, voucher_nos)
         self.assertNotIn(p3.name, voucher_nos)
+
+
+def _create_journal_entry(posting_date, voucher_type, tax_amount, ineligibility_reason=""):
+    if voucher_type == "Reclaim of ITC Reversal":
+        accounts = [
+            {
+                "account": "GST Expense - _TIRC",
+                "credit_in_account_currency": tax_amount * 2,
+            },
+            {
+                "account": "Input Tax CGST - _TIRC",
+                "debit_in_account_currency": tax_amount,
+            },
+            {
+                "account": "Input Tax SGST - _TIRC",
+                "debit_in_account_currency": tax_amount,
+            },
+        ]
+    else:
+        accounts = [
+            {
+                "account": "GST Expense - _TIRC",
+                "debit_in_account_currency": tax_amount * 2,
+            },
+            {
+                "account": "Input Tax CGST - _TIRC",
+                "credit_in_account_currency": tax_amount,
+            },
+            {
+                "account": "Input Tax SGST - _TIRC",
+                "credit_in_account_currency": tax_amount,
+            },
+        ]
+
+    doc = frappe.get_doc(
+        {
+            "doctype": "Journal Entry",
+            "company": COMPANY,
+            "company_gstin": COMPANY_GSTIN,
+            "posting_date": posting_date,
+            "voucher_type": voucher_type,
+            "ineligibility_reason": ineligibility_reason,
+            "accounts": accounts,
+        }
+    )
+    doc.insert()
+    doc.submit()
+    return doc
