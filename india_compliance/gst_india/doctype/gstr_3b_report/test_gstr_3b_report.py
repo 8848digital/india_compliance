@@ -19,6 +19,7 @@ from india_compliance.gst_india.report.gstr_3b_details.gstr_3b_details import (
 )
 from india_compliance.gst_india.utils import get_gst_accounts_by_type
 from india_compliance.gst_india.utils.tests import (
+    append_item,
     create_purchase_invoice,
     create_sales_invoice,
 )
@@ -52,7 +53,7 @@ class TestGSTR3BReport(FrappeTestCase):
 
         create_sales_invoices()
         create_purchase_invoices()
-        create_itc_reclaim_journal_entry()
+        create_itc_reclaim_journal_entry(tax_amount=9)
 
         today = getdate()
         ret_period = f"{today.month:02}{today.year}"
@@ -263,7 +264,7 @@ class TestGSTR3BReport(FrappeTestCase):
         self.assertEqual(net_itc["iamt"], 36.0)
 
     def test_itc_reversal_journal_entry_is_included_in_gstr_3b(self):
-        journal_entry = create_itc_reversal_journal_entry()
+        journal_entry = create_itc_reversal_journal_entry(tax_amount=9)
 
         self.assertEqual(journal_entry.accounts[1].gst_tax_type, "cgst")
         self.assertEqual(journal_entry.accounts[2].gst_tax_type, "sgst")
@@ -286,7 +287,30 @@ class TestGSTR3BReport(FrappeTestCase):
         self.assertEqual(output["itc_elg"]["itc_net"]["camt"], -9.0)
         self.assertEqual(output["itc_elg"]["itc_net"]["samt"], -9.0)
 
-    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_itc_reversal_journal_entry_with_others_is_included_in_gstr_3b(self):
+        journal_entry = create_itc_reversal_journal_entry(ineligibility_reason="Others")
+
+        self.assertEqual(journal_entry.accounts[1].gst_tax_type, "cgst")
+        self.assertEqual(journal_entry.accounts[2].gst_tax_type, "sgst")
+
+        report = frappe.get_doc(
+            {
+                "doctype": "GSTR 3B Report",
+                "company": "_Test Indian Registered Company",
+                "company_gstin": "24AAQCA8719H1ZC",
+                "year": getdate().year,
+                "month_or_quarter": get_month(getdate()),
+            }
+        ).insert()
+
+        output = json.loads(report.json_output)
+        itc_reversed = {row["ty"]: row for row in output["itc_elg"]["itc_rev"]}
+
+        self.assertEqual(itc_reversed["OTH"]["camt"], 9.0)
+        self.assertEqual(itc_reversed["OTH"]["samt"], 9.0)
+        self.assertEqual(output["itc_elg"]["itc_net"]["camt"], -9.0)
+        self.assertEqual(output["itc_elg"]["itc_net"]["samt"], -9.0)
+
     def test_inward_nil_non_gst_report_includes_sez_services(self):
         pi = create_purchase_invoice(
             supplier="_Test Registered Supplier",
@@ -639,6 +663,52 @@ def create_purchase_invoices():
         supplier="_Test Registered InterState Supplier",
         is_out_state=True,
     )
+
+
+def create_advance_payment_entry(do_not_submit=False, **kwargs):
+    payment_doc = create_transaction(
+        **{
+            "doctype": "Payment Entry",
+            "payment_type": "Receive",
+            "mode_of_payment": "Cash",
+            "company_address": "_Test Indian Registered Company-Billing",
+            "party_type": "Customer",
+            "party": "_Test Registered Customer",
+            "customer_address": "_Test Registered Customer-Billing",
+            "paid_to": "Cash - _TIRC",
+            "paid_amount": 500,
+            "is_in_state": 1,
+            "do_not_save": True,
+            **kwargs,
+        }
+    )
+
+    payment_doc.setup_party_account_field()
+    payment_doc.set_missing_values()
+    payment_doc.set_exchange_rate()
+    payment_doc.received_amount = payment_doc.paid_amount / payment_doc.target_exchange_rate
+    payment_doc.save()
+
+    if not do_not_submit:
+        payment_doc.submit()
+
+    return payment_doc
+
+
+def create_sales_invoice_against_advance(payment_doc):
+    invoice_doc = create_transaction(
+        doctype="Sales Invoice",
+        customer="_Test Registered Customer",
+        is_in_state=1,
+        do_not_submit=True,
+    )
+
+    invoice_doc.set_advances()
+    for row in invoice_doc.advances:
+        row.allocated_amount = invoice_doc.net_total if row.reference_name == payment_doc.name else 0
+
+    invoice_doc.submit()
+    return invoice_doc
 
 
 def create_itc_reversal_journal_entry(
