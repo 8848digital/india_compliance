@@ -1,11 +1,10 @@
 import re
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from india_compliance.gst_india.utils.tests import (
     create_itc_reversal_journal_entry,
-    create_journal_entry,
 )
 
 
@@ -89,20 +88,6 @@ class TestJournalEntry(FrappeTestCase):
         When a company has multiple GSTINs and company_gstin is not set on the
         Journal Entry, validate() should raise a ValidationError.
         """
-        # Ensure company has multiple GSTINs via addresses
-        frappe.get_doc(
-            {
-                "doctype": "Address",
-                "address_title": "Second Address",
-                "address_type": "Billing",
-                "address_line1": "Line 1",
-                "city": "Mumbai",
-                "state": "Maharashtra",
-                "country": "India",
-                "gstin": "27AAQCA8719H1Z6",
-                "links": [{"link_doctype": "Company", "link_name": "_Test Indian Registered Company"}],
-            }
-        ).insert()
 
         self.assertRaisesRegex(
             frappe.ValidationError,
