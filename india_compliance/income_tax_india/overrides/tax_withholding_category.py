@@ -1,26 +1,48 @@
 import frappe
+from frappe import _
 
-from india_compliance.income_tax_india.constants import (
-    NEW_TDS_SECTION,
-    get_tds_section_value,
-)
+from india_compliance.income_tax_india.constants import NEW_TDS_SECTION, get_tds_section_value
 
 
 def on_change(doc, method=None):
     frappe.cache.delete_value("tax_withholding_accounts")
 
 
+def validate(doc, method=None):
+    if not doc.tds_section:
+        return
+
+    valid_values = get_valid_tds_section_values()
+    if doc.tds_section in valid_values:
+        return
+
+    frappe.throw(_("Invalid TDS Section '{0}'.").format(doc.tds_section))
+
+
+def get_valid_tds_section_values() -> set[str]:
+    return {get_tds_section_value(code) for code in NEW_TDS_SECTION}
+
+
 @frappe.whitelist()
-def search_tds_sections(doctype, txt, searchfield, start, page_len, filters, **kwargs):
+def search_tds_sections(txt: str | None = None):
     txt = (txt or "").strip().casefold()
+    all_options = []
+    filtered_options = []
 
-    if txt:
-        matched = [row for row in ALL_TDS_OPTIONS if txt in f"{row['value']} {row['description']}".casefold()]
-    else:
-        matched = ALL_TDS_OPTIONS
+    for code, (_section, description) in NEW_TDS_SECTION.items():
+        value = get_tds_section_value(code)
 
-    # Fall back to all options so saved values always validate in autocomplete
-    options = matched or ALL_TDS_OPTIONS
+        option = {
+            "label": value,
+            "value": value,
+            "description": description,
+        }
+        all_options.append(option)
+
+        if not txt or txt in f"{value} {description or ''}".casefold():
+            filtered_options.append(option)
+
+    options = filtered_options or all_options
     return sorted(options, key=lambda d: d["value"])
 
 

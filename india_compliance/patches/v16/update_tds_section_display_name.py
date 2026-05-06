@@ -6,7 +6,8 @@ from india_compliance.income_tax_india.constants import NEW_TDS_SECTION, get_tds
 
 def execute():
     """
-    Update tds_section in Tax Withholding Category with section names.
+    Update tds_section in Tax Withholding Category to 'code - section' format.
+    This updates only records where tds_section exactly matches the code.
     """
     twc = frappe.qb.DocType("Tax Withholding Category")
     section_case = Case()
