@@ -171,7 +171,8 @@ class GSTR3BOutwardSubcategory(GSTR3BOutwardConditions):
 class GSTR3BOutwardInvoices(GSTR3BOutwardSubcategory):
     def __init__(self, filters):
         self.filters = filters
-        self.gstr3b_query = GSTR3BQuery(filters)
+        self.filters.filter_by = "Posting Date"
+        self.inward_query = GSTR3BInwardQuery(filters)
         self.gstr1_query = GSTR1Query(filters)
 
     def get_data(self):
