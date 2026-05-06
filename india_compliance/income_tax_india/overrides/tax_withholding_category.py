@@ -1,5 +1,10 @@
 import frappe
 
+from india_compliance.income_tax_india.constants import (
+    NEW_TDS_SECTION,
+    get_tds_section_value,
+)
+
 
 def on_change(doc, method=None):
     frappe.cache.delete_value("tax_withholding_accounts")
