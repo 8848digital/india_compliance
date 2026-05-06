@@ -1,8 +1,10 @@
 import frappe
 from frappe.query_builder import Case
 
-from india_compliance.income_tax_india.overrides.company import (
-    create_or_update_tax_withholding_category,
+from india_compliance.income_tax_india.constants import (
+    OLD_TDS_SECTIONS,
+    TDS_ENTITY_TYPE,
+    get_tds_section_value,
 )
 
 # (old_section, entity_type) -> new_code
@@ -80,6 +82,9 @@ def execute():
         .where(twc.tds_section != "")
         .run()
     )
+
+    # Step 2: Update tds_section
+    mapped_sections = set(old for old, _ in OLD_TO_NEW)
 
     section_case = Case()
     for (old_section, entity_type), new_code in OLD_TO_NEW.items():

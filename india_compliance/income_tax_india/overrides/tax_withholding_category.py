@@ -11,15 +11,7 @@ def on_change(doc, method=None):
 
 
 @frappe.whitelist()
-def search_tds_sections(
-    doctype: str | None = None,
-    txt: str | None = None,
-    searchfield: str | None = None,
-    start: int = 0,
-    page_len: int = 20,
-    filters: dict | None = None,
-    **kwargs,
-):
+def search_tds_sections(doctype, txt, searchfield, start, page_len, filters, **kwargs):
     txt = (txt or "").strip().casefold()
 
     if txt:
