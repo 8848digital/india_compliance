@@ -13,8 +13,6 @@ class TestJournalEntry(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        frappe.db.savepoint("before_test_journal_entry")
-
         # New company with a single GSTIN (no linked addresses).
         # The make_company_fixtures hook auto-creates GST accounts
         # and registers them in GST Settings.
@@ -35,9 +33,27 @@ class TestJournalEntry(FrappeTestCase):
         )
         cls.company.insert()
 
+        cls.multi_gstin_company_name = "_Test Indian Registered Company"
+        cls._create_company_address(
+            cls.multi_gstin_company_name,
+            gstin="27AAQCA8719H1Z6",
+            address_title="_Test JE Multi GSTIN Billing",
+        )
+
     @classmethod
-    def tearDownClass(cls):
-        frappe.db.rollback(save_point="before_test_journal_entry")
+    def _create_company_address(cls, company, gstin, address_title):
+        address = frappe.new_doc("Address")
+        address.address_title = address_title
+        address.address_type = "Billing"
+        address.address_line1 = "Test Address"
+        address.city = "Mumbai"
+        address.state = "Maharashtra"
+        address.country = "India"
+        address.pincode = "400001"
+        address.gstin = gstin
+        address.gst_category = "Registered Regular"
+        address.append("links", {"link_doctype": "Company", "link_name": company})
+        address.insert()
 
     def test_auto_set_company_gstin_for_single_linked_gstin(self):
         """
