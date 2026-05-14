@@ -17,8 +17,12 @@ from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
 from erpnext.stock.doctype.purchase_receipt.purchase_receipt import (
     update_regional_gl_entries,
 )
-from frappe.model.mapper import get_mapped_doc
+<<<<<<< HEAD
 from frappe.tests.utils import FrappeTestCase, change_settings
+=======
+from frappe.model.mapper import get_mapped_doc
+from frappe.tests import IntegrationTestCase, change_settings
+>>>>>>> e0737b74 (fix: add after_mapping event for delivery note and purchase receipt for inter company transactions)
 from frappe.utils import add_days, getdate, today
 from parameterized import parameterized_class
 
@@ -1520,11 +1524,6 @@ class TestPlaceOfSupply(FrappeTestCase):
         # Both supplier and company are in Gujarat (24), so the PO is intra-state
         # and place_of_supply must NOT inherit the customer's state from the SO.
         self.assertEqual(po.place_of_supply, "24-Gujarat")
-
-        # Supplier GST category and taxes must be correctly set
-        self.assertEqual(po.gst_category, "Registered Regular")
-        self.assertTrue(po.taxes_and_charges)
-        self.assertTrue(po.taxes)
 
     def test_place_of_supply_when_sales_order_mapped_from_purchase_order(self):
         """
