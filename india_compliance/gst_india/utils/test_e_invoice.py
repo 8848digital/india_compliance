@@ -39,7 +39,6 @@ class TestEInvoice(FrappeTestCase):
                 "auto_generate_e_invoice": 0,
                 "enable_e_waybill": 1,
                 "fetch_e_waybill_data": 0,
-                "attach_e_waybill_print": 0,
                 "apply_e_invoice_only_for_selected_companies": 0,
                 "enable_retry_einv_ewb_generation": 1,
                 "auto_cancel_e_invoice": 0,
@@ -122,7 +121,7 @@ class TestEInvoice(FrappeTestCase):
         si.submit()
 
         e_invoice_data = EInvoiceData(si)
-        e_invoice_data.set_item_list()
+        e_invoice_data.get_data()
 
         self.assertListEqual(
             e_invoice_data.item_list,
@@ -147,6 +146,7 @@ class TestEInvoice(FrappeTestCase):
                     "CesRt": 0,
                     "CesAmt": 0,
                     "CesNonAdvlAmt": 0,
+                    "OthChrg": 0,
                     "TotItemVal": 8.52,
                     "BchDtls": {"Nm": None, "ExpDt": None},
                 },
@@ -170,6 +170,7 @@ class TestEInvoice(FrappeTestCase):
                     "CesRt": 0,
                     "CesAmt": 0,
                     "CesNonAdvlAmt": 0,
+                    "OthChrg": 0,
                     "TotItemVal": 8.5,
                     "BchDtls": {"Nm": None, "ExpDt": None},
                 },
@@ -389,16 +390,15 @@ class TestEInvoice(FrappeTestCase):
 
         self.assertRaisesRegex(
             frappe.exceptions.ValidationError,
-            re.compile(r".*e-Invoice is not applicable for this invoice as all items are non-taxable."),
+            re.compile(r"e-Invoice is not applicable for invoice with only Nil-Rated/Exempted/Non-GST items"),
             validate_e_invoice_applicability,
             si,
         )
 
     @responses.activate
-    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Zero Taxable Value"})
+    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Other Charges"})
     def test_generate_e_invoice_with_nil_exempted_item(self):
-        """Generate test e-Invoice for nil/exempted items Item"""
-
+        """Generate e-Invoice for invoice containing Nil/Exempted items."""
         test_data = self.e_invoice_test_data.get("nil_exempted_item")
         si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
 
@@ -450,7 +450,7 @@ class TestEInvoice(FrappeTestCase):
 
         self.assertFalse(frappe.db.get_value("e-Waybill Log", {"reference_name": si.name}, "name"))
 
-    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Zero Taxable Value"})
+    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Other Charges"})
     def test_request_data_for_nil_only_invoice_with_other_charges(self):
         """Nil-only invoice: nil items in ItemList with AssAmt=0, item-level OthChrg=value."""
         test_data = self.e_invoice_test_data.get("nil_exempted_item")
@@ -494,7 +494,7 @@ class TestEInvoice(FrappeTestCase):
 
     @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Do Not Generate"})
     def test_request_data_for_mixed_invoice_with_do_not_generate(self):
-        """Mixed invoice with Do Not Generate: nil items reported as item-level OthChrg (same as Generate with Other Charges); validation only blocks an all-nil invoice."""
+        """Mixed invoice with Do Not Generate: nil items excluded from ItemList."""
         test_data = self.e_invoice_test_data.get("nil_exempted_item")
         si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
 
@@ -512,24 +512,18 @@ class TestEInvoice(FrappeTestCase):
 
         request_data = EInvoiceData(si).get_data()
 
-        self.assertEqual(2, len(request_data["ItemList"]))
+        self.assertEqual(1, len(request_data["ItemList"]))
 
-        nil_item = next(item for item in request_data["ItemList"] if item["GstRt"] == 0)
-        taxable_item = next(item for item in request_data["ItemList"] if item["GstRt"] == 12.0)
-
-        self.assertEqual(0, nil_item["AssAmt"])
-        self.assertEqual(100, nil_item["OthChrg"])
-        self.assertEqual(100, nil_item["TotItemVal"])
-
+        taxable_item = request_data["ItemList"][0]
+        self.assertEqual(12.0, taxable_item["GstRt"])
         self.assertEqual(10, taxable_item["AssAmt"])
-        self.assertEqual(0, taxable_item["OthChrg"])
         self.assertEqual(11.2, taxable_item["TotItemVal"])
 
         self.assertEqual(10, request_data["ValDtls"]["AssVal"])
 
-    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Zero Taxable Value"})
+    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Other Charges"})
     def test_request_data_with_nil_exempted_item_as_other_charges(self):
-        """Mixed invoice with Generate with Zero Taxable Value: nil items in ItemList with item-level OthChrg."""
+        """Mixed invoice with Generate with Other Charges: nil items in ItemList with item-level OthChrg."""
         test_data = self.e_invoice_test_data.get("nil_exempted_item")
         si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
 
@@ -854,7 +848,6 @@ class TestEInvoice(FrappeTestCase):
 
         self.assertTrue(frappe.get_cached_value("e-Invoice Log", si.irn, "is_cancelled"), 1)
 
-    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Other Charges"})
     def test_validate_e_invoice_applicability(self):
         """Test if e_invoicing is applicable"""
 
@@ -917,12 +910,7 @@ class TestEInvoice(FrappeTestCase):
                 gst_treatment="Nil-Rated",
             ),
         )
-        self.assertRaisesRegex(
-            frappe.exceptions.ValidationError,
-            re.compile(r"^(e-Invoice is not applicable for invoice with only Nil-Rated/Exempted items*)$"),
-            validate_e_invoice_applicability,
-            si,
-        )
+        self.assertTrue(validate_e_invoice_applicability(si))
 
         append_item(
             si,

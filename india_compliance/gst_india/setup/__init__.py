@@ -63,8 +63,10 @@ def create_hrms_custom_fields():
 def create_education_custom_fields():
     _create_custom_fields(EDUCATION_CUSTOM_FIELDS, ignore_validate=True)
 
+
 def create_healthcare_custom_fields():
     _create_custom_fields(HEALTHCARE_CUSTOM_FIELDS, ignore_validate=True)
+
 
 def create_accounting_dimension_fields():
     doctypes = frappe.get_hooks(
@@ -216,6 +218,7 @@ def set_default_gst_settings():
         "auto_generate_e_invoice": 1,
         "generate_e_waybill_with_e_invoice": 1,
         "e_invoice_applicable_from": nowdate(),
+        "nil_exempt_e_invoice_treatment": "Do Not Generate",
         "fetch_e_invoice_details_from_gst_portal": 1,
         "e_invoice_reporting_time_limit_days": 30,
         "autofill_party_info": 1,
@@ -297,8 +300,7 @@ def show_accounts_settings_override_warning():
     since it defaults to `1`
     """
 
-    address_for_tax_category = frappe.db.get_value(
-        "Accounts Settings",
+    address_for_tax_category = frappe.db.get_single_value(
         "Accounts Settings",
         "determine_address_tax_category_from",
     )

@@ -148,9 +148,6 @@ def generate_e_invoice(docname: str, throw: bool = True, force: bool = False):
         api = EInvoiceAPI.create(doc)
         result = api.generate_irn(data)
 
-        if not result.Irn:
-            frappe.throw(_("e-Invoice generation failed"))
-
         # Handle Duplicate IRN
         if result.InfCd == "DUPIRN":
             current_gstin = data.get("BuyerDtls").get("Gstin")
@@ -184,6 +181,9 @@ def generate_e_invoice(docname: str, throw: bool = True, force: bool = False):
                 frappe.throw(result.error_message, title=_("Error Generating e-Invoice"))
 
             result = api.generate_irn(data)
+
+        if not result.Irn:
+            frappe.throw(_("e-Invoice generation failed"))
 
     except GSPServerError as e:
         handle_server_errors(settings, doc, "e-Invoice", e)
@@ -321,7 +321,7 @@ def handle_duplicate_irn_error(
 
     if response.error_code:
         response = irn_data
-    
+
     if not response.Irn:
         frappe.throw(_("e-Invoice generation failed"))
 
@@ -540,10 +540,6 @@ def validate_e_invoice_applicability(doc, gst_settings=None, throw=True):
     if doc.company_gstin == doc.billing_address_gstin:
         return _throw(_("e-Invoice is not applicable for invoices with same company and billing GSTIN"))
 
-    if not validate_taxable_item(doc, throw=throw):
-        # e-Invoice not required for invoice wih all nill-rated/exempted items.
-        return
-
     if not (doc.place_of_supply == "96-Other Countries" or doc.billing_address_gstin):
         return _throw(_("e-Invoice is not applicable for B2C invoices"))
 
@@ -557,10 +553,7 @@ def validate_e_invoice_applicability(doc, gst_settings=None, throw=True):
         item.gst_treatment in TAXABLE_GST_TREATMENTS for item in doc.items
     ):
         return _throw(
-            _(
-                "GST Settings for e-Invoice for non-taxable items set as `Do Not Generate`. "
-                "Hence e-Invoice is not applicable for this invoice as all items are non-taxable."
-            ),
+            _("e-Invoice is not applicable for invoice with only Nil-Rated/Exempted/Non-GST items"),
             exc=NotApplicableError,
         )
 
@@ -577,27 +570,6 @@ def validate_e_invoice_applicability(doc, gst_settings=None, throw=True):
         )
 
     return True
-
-
-def validate_taxable_item(doc, throw=True):
-    """
-    Validates that the document contains at least one GST taxable item.
-
-    If all items are Nil-Rated or Exempted and throw is True, it raises an exception.
-    Otherwise, it simply returns False.
-
-    """
-    # Check if there is at least one taxable item in the document
-    if any(item.gst_treatment in TAXABLE_GST_TREATMENTS for item in doc.items):
-        return True
-
-    if not throw:
-        return
-
-    frappe.throw(
-        _("e-Invoice is not applicable for invoice with only Nil-Rated/Exempted items"),
-        exc=NotApplicableError,
-    )
 
 
 def validate_if_e_invoice_can_be_cancelled(doc, throw=True):
@@ -658,9 +630,10 @@ def get_e_invoice_info(doc):
 class EInvoiceData(GSTTransactionData):
     def get_data(self):
         self.validate_transaction()
+        self.item_details_list = self.get_all_item_details()
+        self.apply_nil_exempt_treatment()
         self.set_transaction_details()
         self.set_item_list()
-        self.update_other_charges()
         self.set_transporter_details()
         self.set_party_address_details()
         return self.sanitize_data(self.get_invoice_data())
@@ -670,7 +643,7 @@ class EInvoiceData(GSTTransactionData):
         Configure how nil/exempt items appear in the e-Invoice.
 
         - Do Not Generate: nil items are excluded from ItemList.
-        - Generate with Zero Taxable Value (default): nil item value reported at
+        - Generate with Other Charges (default): nil item value reported at
           item-level OthChrg with AssAmt = 0.
         - Generate with Taxable Values: nil items keep their taxable_value.
         """
@@ -713,26 +686,19 @@ class EInvoiceData(GSTTransactionData):
             )
 
     def update_item_details(self, item_details, item):
-        if self.generate_nil_exempt_as_taxable():
-            item_details.taxable_amount += item_details.non_taxable_amount
-            item_details.non_taxable_amount = 0
-
         item_details.update(
             {
                 "discount_amount": 0,
                 "serial_no": "",
                 "is_service_item": ("Y" if item.gst_hsn_code.startswith(SERVICE_HSN_PREFIX) else "N"),
                 "unit_rate": (
-                    abs(self.rounded(item_details.taxable_amount / item.qty, 3))
+                    abs(self.rounded(item.taxable_value / item.qty, 3))
                     if item.qty
-                    else abs(self.rounded(item_details.taxable_amount, 3))
+                    else abs(self.rounded(item.taxable_value, 3))
                 ),
                 "barcode": self.sanitize_value(item.barcode, max_length=30, truncate=False),
             }
         )
-
-        if self.doc.is_reverse_charge:
-            item_details["total_value"] = abs(self.rounded(item.taxable_value, 2))
 
         if batch_no := self.sanitize_value(item.batch_no, max_length=20, truncate=False):
             batch_expiry_date = frappe.db.get_value("Batch", item.batch_no, "expiry_date")
@@ -743,8 +709,12 @@ class EInvoiceData(GSTTransactionData):
                 }
             )
 
+    def update_item_total_value(self, item_details, item):
         if self.doc.is_reverse_charge:
             item_details["total_value"] = abs(self.rounded(item.taxable_value, 2))
+            return
+
+        super().update_item_total_value(item_details, item)
 
     def update_transaction_details(self):
         invoice_type = "INV"
@@ -765,10 +735,6 @@ class EInvoiceData(GSTTransactionData):
                         ),
                     }
                 )
-
-        if self.generate_nil_exempt_as_taxable():
-            self.transaction_details.total_taxable_value += self.transaction_details.total_non_taxable_value
-            self.transaction_details.total_non_taxable_value = 0
 
         self.transaction_details.update(
             {
@@ -1013,9 +979,9 @@ class EInvoiceData(GSTTransactionData):
             "Unit": item_details.uom,
             "Qty": item_details.qty,
             "UnitPrice": item_details.unit_rate,
-            "TotAmt": item_details.taxable_amount,
+            "TotAmt": item_details.taxable_value,
             "Discount": item_details.discount_amount,
-            "AssAmt": item_details.taxable_amount,
+            "AssAmt": item_details.taxable_value,
             "PrdSlNo": item_details.serial_no,
             "GstRt": item_details.tax_rate,
             "IgstAmt": item_details.igst_amount,
@@ -1024,7 +990,7 @@ class EInvoiceData(GSTTransactionData):
             "CesRt": item_details.cess_rate,
             "CesAmt": item_details.cess_amount,
             "CesNonAdvlAmt": item_details.cess_non_advol_amount,
-            "OthChrg": item_details.non_taxable_amount,
+            "OthChrg": item_details.get("other_charges", 0),
             "TotItemVal": item_details.total_value,
             "BchDtls": {
                 "Nm": item_details.batch_no,
@@ -1049,9 +1015,6 @@ class EInvoiceData(GSTTransactionData):
             export_details["Port"] = self.doc.port_code
 
         return export_details
-
-    def generate_nil_exempt_as_taxable(self):
-        return self.settings.nil_exempt_e_invoice_treatment == "Generate with Taxable Values"
 
 
 #######################################################################################

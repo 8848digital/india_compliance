@@ -23,6 +23,7 @@
   "is_retry_einv_ewb_generation_pending",
   "column_break_rk3h",
   "sandbox_mode",
+  "use_fallback_for_nic",
   "e_waybill_section",
   "enable_e_waybill",
   "enable_e_waybill_from_dn",
@@ -46,9 +47,9 @@
   "restrict_cancel_if_e_invoice_final",
   "reason_for_e_invoice_cancellation",
   "e_invoice_reporting_time_limit_days",
-  "use_fallback_for_nic",
   "column_break_17",
   "fetch_e_invoice_details_from_gst_portal",
+  "nil_exempt_e_invoice_treatment",
   "apply_e_invoice_only_for_selected_companies",
   "e_invoice_applicable_from",
   "e_invoice_applicable_companies",
@@ -405,6 +406,12 @@
    "label": "GSTN Public Certificate"
   },
   {
+   "fieldname": "nic_public_key",
+   "fieldtype": "Code",
+   "hidden": 1,
+   "label": "NIC Public Key"
+  },
+  {
    "default": "0",
    "depends_on": "eval: doc.enable_e_waybill",
    "fieldname": "enable_e_waybill_from_pr",
@@ -694,12 +701,6 @@
    "label": "e-Invoice Reporting Time Limit (in Days)"
   },
   {
-   "fieldname": "nic_public_key",
-   "fieldtype": "Code",
-   "hidden": 1,
-   "label": "NIC Public Key"
-  },
-  {
    "default": "1",
    "depends_on": "eval: india_compliance.is_api_enabled(doc)",
    "description": "Check this box only if API requests are failing with invalid certificate error",
@@ -723,7 +724,7 @@
    "depends_on": "eval: doc.enable_e_invoice",
    "fieldname": "nil_exempt_e_invoice_treatment",
    "fieldtype": "Select",
-   "label": "Nil / Exempted / Non-GST Items in e-Invoice",
+   "label": "Nil / Exempted Items in e-Invoice",
    "options": "Do Not Generate\nGenerate with Other Charges\nGenerate with Taxable Values"
   }
  ],
@@ -731,7 +732,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-10 15:27:22.646389",
+ "modified": "2026-05-15 18:15:50.948178",
  "modified_by": "Administrator",
  "module": "GST India",
  "name": "GST Settings",
