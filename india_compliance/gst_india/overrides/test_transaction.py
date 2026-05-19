@@ -17,6 +17,7 @@ from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
 from erpnext.stock.doctype.purchase_receipt.purchase_receipt import (
     update_regional_gl_entries,
 )
+from frappe.model.mapper import get_mapped_doc
 from frappe.tests.utils import FrappeTestCase, change_settings
 from frappe.utils import add_days, getdate, today
 from parameterized import parameterized_class
