@@ -654,23 +654,6 @@ class EInvoiceData(GSTTransactionData):
         self.set_party_address_details()
         return self.sanitize_data(self.get_invoice_data())
 
-    def set_item_list(self):
-        self.item_list = []
-
-        for item_details in self.get_all_item_details():
-            if item_details.get("gst_treatment") not in TAXABLE_GST_TREATMENTS:
-                continue
-
-            self.item_list.append(self.get_item_data(item_details))
-
-    def update_other_charges(self):
-        """
-        Non Taxable Value should be added to other charges.
-        """
-        self.transaction_details.other_charges = self.rounded(
-            self.transaction_details.other_charges + self.transaction_details.total_non_taxable_value
-        )
-
     def validate_transaction(self):
         super().validate_transaction()
         validate_e_invoice_applicability(self.doc, self.settings)
@@ -688,15 +671,19 @@ class EInvoiceData(GSTTransactionData):
             )
 
     def update_item_details(self, item_details, item):
+        if self.generate_nil_exempt_as_taxable():
+            item_details.taxable_amount += item_details.non_taxable_amount
+            item_details.non_taxable_amount = 0
+
         item_details.update(
             {
                 "discount_amount": 0,
                 "serial_no": "",
                 "is_service_item": ("Y" if item.gst_hsn_code.startswith(SERVICE_HSN_PREFIX) else "N"),
                 "unit_rate": (
-                    abs(self.rounded(item.taxable_value / item.qty, 3))
+                    abs(self.rounded(item_details.taxable_amount / item.qty, 3))
                     if item.qty
-                    else abs(self.rounded(item.taxable_value, 3))
+                    else abs(self.rounded(item_details.taxable_amount, 3))
                 ),
                 "barcode": self.sanitize_value(item.barcode, max_length=30, truncate=False),
             }
@@ -713,6 +700,9 @@ class EInvoiceData(GSTTransactionData):
                     "batch_expiry_date": format_date(batch_expiry_date, self.DATE_FORMAT),
                 }
             )
+
+        if self.doc.is_reverse_charge:
+            item_details["total_value"] = abs(self.rounded(item.taxable_value, 2))
 
     def update_transaction_details(self):
         invoice_type = "INV"
@@ -733,6 +723,10 @@ class EInvoiceData(GSTTransactionData):
                         ),
                     }
                 )
+
+        if self.generate_nil_exempt_as_taxable():
+            self.transaction_details.total_taxable_value += self.transaction_details.total_non_taxable_value
+            self.transaction_details.total_non_taxable_value = 0
 
         self.transaction_details.update(
             {
@@ -977,9 +971,9 @@ class EInvoiceData(GSTTransactionData):
             "Unit": item_details.uom,
             "Qty": item_details.qty,
             "UnitPrice": item_details.unit_rate,
-            "TotAmt": item_details.taxable_value,
+            "TotAmt": item_details.taxable_amount,
             "Discount": item_details.discount_amount,
-            "AssAmt": item_details.taxable_value,
+            "AssAmt": item_details.taxable_amount,
             "PrdSlNo": item_details.serial_no,
             "GstRt": item_details.tax_rate,
             "IgstAmt": item_details.igst_amount,
@@ -988,6 +982,7 @@ class EInvoiceData(GSTTransactionData):
             "CesRt": item_details.cess_rate,
             "CesAmt": item_details.cess_amount,
             "CesNonAdvlAmt": item_details.cess_non_advol_amount,
+            "OthChrg": item_details.non_taxable_amount,
             "TotItemVal": item_details.total_value,
             "BchDtls": {
                 "Nm": item_details.batch_no,
@@ -1013,6 +1008,8 @@ class EInvoiceData(GSTTransactionData):
 
         return export_details
 
+    def generate_nil_exempt_as_taxable(self):
+        return self.settings.nil_exempt_e_invoice_treatment == "Generate with Taxable Values"
 
 
 #######################################################################################

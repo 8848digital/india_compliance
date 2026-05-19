@@ -1526,12 +1526,14 @@ class EWaybillData(GSTTransactionData):
                     cess_non_advol_rate=item.cess_non_advol_rate,
                     item_no=item.item_no,
                     qty=0,
-                    taxable_value=0,
+                    taxable_amount=0,
+                    non_taxable_amount=0,
                 ),
             )
 
             hsn_wise_details.qty += item.qty
-            hsn_wise_details.taxable_value += item.taxable_value
+            hsn_wise_details.taxable_amount += item.taxable_amount
+            hsn_wise_details.non_taxable_amount += item.non_taxable_amount
 
         if len(hsn_wise_items) > ITEM_LIMIT:
             frappe.throw(
@@ -1869,7 +1871,9 @@ class EWaybillData(GSTTransactionData):
             "hsnCode": item_details.hsn_code,
             "qtyUnit": item_details.uom,
             "quantity": item_details.qty,
-            "taxableAmount": item_details.taxable_value,
+            # NIC e-Waybill API has a single line-value slot, so the taxable
+            # and non-taxable portions are reported together.
+            "taxableAmount": item_details.taxable_amount + item_details.non_taxable_amount,
             "sgstRate": item_details.sgst_rate,
             "cgstRate": item_details.cgst_rate,
             "igstRate": item_details.igst_rate,
