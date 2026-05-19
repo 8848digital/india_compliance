@@ -60,6 +60,24 @@ class GSTSettings(Document):
         self.update_e_invoice_status()
         self.validate_unique_states()
 
+    def warn_for_nil_exempt_e_invoice_treatment(self):
+        if not self.enable_e_invoice:
+            return
+
+        if self.nil_exempt_e_invoice_treatment != "Generate with Taxable Values":
+            return
+
+        if not self.has_value_changed("nil_exempt_e_invoice_treatment"):
+            return
+
+        frappe.msgprint(
+            _(
+                "e-Invoice for Nil / Exempted / Non-GST items will be generated with <b>Taxable Values</b>.<br/><br/>"
+                "Not Recommended: Auto populated in GSTR-1 as Zero-Rated, causing inconsistencies. Use only if required."
+            ),
+            indicator="orange",
+        )
+
     def update_e_invoice_status(self):
         previous_doc = self.get_doc_before_save()
 

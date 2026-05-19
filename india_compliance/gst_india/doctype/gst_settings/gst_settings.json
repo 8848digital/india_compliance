@@ -717,6 +717,14 @@
    "fieldtype": "Table",
    "label": "e-Waybill Threshold for Intrastate",
    "options": "State-wise e-Waybill Threshold"
+  },
+  {
+   "default": "Do Not Generate",
+   "depends_on": "eval: doc.enable_e_invoice",
+   "fieldname": "nil_exempt_e_invoice_treatment",
+   "fieldtype": "Select",
+   "label": "Nil / Exempted / Non-GST Items in e-Invoice",
+   "options": "Do Not Generate\nGenerate with Other Charges\nGenerate with Taxable Values"
   }
  ],
  "grid_page_length": 50,
