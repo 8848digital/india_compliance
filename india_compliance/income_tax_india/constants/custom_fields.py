@@ -41,7 +41,7 @@ CUSTOM_FIELDS = {
             "fieldname": "tds_section",
             "insert_after": "round_off_tax_amount",
             "fieldtype": "Autocomplete",
-            "options": tds_section_options,
+            "options": None,
             "translatable": 0,
             "mandatory_depends_on": "eval:doc.entity_type",
         },
