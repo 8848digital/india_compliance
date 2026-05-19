@@ -380,6 +380,20 @@ class TestEInvoice(FrappeTestCase):
 
         self.assertFalse(frappe.db.get_value("e-Waybill Log", {"reference_name": si.name}, "name"))
 
+    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Do Not Generate"})
+    def test_do_not_generate_for_nil_only_invoice(self):
+        """e-Invoice should be blocked for all-nil/exempt invoices when set to Do Not Generate."""
+        test_data = self.e_invoice_test_data.get("nil_exempted_item")
+        si = create_sales_invoice(**test_data.get("kwargs"), do_not_submit=True, is_in_state=True)
+        si.submit()
+
+        self.assertRaisesRegex(
+            frappe.exceptions.ValidationError,
+            re.compile(r".*e-Invoice is not applicable for this invoice as all items are non-taxable."),
+            validate_e_invoice_applicability,
+            si,
+        )
+
     @responses.activate
     def test_generate_e_invoice_with_nil_exempted_item(self):
         """Generate test e-Invoice for nil/exempted items Item"""

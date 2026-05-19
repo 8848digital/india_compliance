@@ -553,6 +553,17 @@ def validate_e_invoice_applicability(doc, gst_settings=None, throw=True):
     if not gst_settings.enable_e_invoice:
         return _throw(_("e-Invoice is not enabled in GST Settings"))
 
+    if gst_settings.nil_exempt_e_invoice_treatment == "Do Not Generate" and not any(
+        item.gst_treatment in TAXABLE_GST_TREATMENTS for item in doc.items
+    ):
+        return _throw(
+            _(
+                "GST Settings for e-Invoice for non-taxable items set as `Do Not Generate`. "
+                "Hence e-Invoice is not applicable for this invoice as all items are non-taxable."
+            ),
+            exc=NotApplicableError,
+        )
+
     applicability_date = get_e_invoice_applicability_date(doc.company, gst_settings, throw)
 
     if not applicability_date:
