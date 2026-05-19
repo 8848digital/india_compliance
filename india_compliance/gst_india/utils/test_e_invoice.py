@@ -395,6 +395,7 @@ class TestEInvoice(FrappeTestCase):
         )
 
     @responses.activate
+    @change_settings("GST Settings", {"nil_exempt_e_invoice_treatment": "Generate with Other Charges"})
     def test_generate_e_invoice_with_nil_exempted_item(self):
         """Generate test e-Invoice for nil/exempted items Item"""
 

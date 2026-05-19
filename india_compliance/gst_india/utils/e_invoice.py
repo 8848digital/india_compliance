@@ -665,6 +665,37 @@ class EInvoiceData(GSTTransactionData):
         self.set_party_address_details()
         return self.sanitize_data(self.get_invoice_data())
 
+    def apply_nil_exempt_treatment(self):
+        """
+        Configure how nil/exempt items appear in the e-Invoice.
+
+        - Do Not Generate: nil items are excluded from ItemList.
+        - Generate with Other Charges (default): nil item value reported at
+          item-level OthChrg with AssAmt = 0.
+        - Generate with Taxable Values: nil items keep their taxable_value.
+        """
+        treatment = self.settings.nil_exempt_e_invoice_treatment
+
+        if treatment == "Generate with Taxable Values":
+            return
+
+        if treatment == "Do Not Generate":
+            self.item_details_list = [
+                item for item in self.item_details_list if item.gst_treatment in TAXABLE_GST_TREATMENTS
+            ]
+            return
+
+        for item in self.item_details_list:
+            if item.gst_treatment in TAXABLE_GST_TREATMENTS:
+                continue
+            item.update(
+                {
+                    "other_charges": item.taxable_value,
+                    "taxable_value": 0,
+                    "unit_rate": 0,
+                }
+            )
+
     def validate_transaction(self):
         super().validate_transaction()
         validate_e_invoice_applicability(self.doc, self.settings)
