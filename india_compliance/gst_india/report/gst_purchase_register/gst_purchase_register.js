@@ -4,9 +4,10 @@
 
 {% include "erpnext/accounts/report/purchase_register/purchase_register.js" %}
 
+<<<<<<< HEAD
 frappe.query_reports["GST Purchase Register"] = frappe.query_reports["Purchase Register"]
 india_compliance.set_last_month_as_default_period(frappe.query_reports["GST Purchase Register"]);
-
+=======
 frappe.query_reports["GST Purchase Register"] = {
     filters: [
         {
@@ -116,11 +117,18 @@ function custom_report_column_total(...args) {
     const column_field = args[1].column.fieldname;
     if (!AMOUNT_FIELDS.includes(column_field)) return;
 
-    const { data } = this.datamanager;
-    return this.datamanager.getFilteredRowIndices().reduce((acc, index) => {
-        const row = data[index];
+    const filtered_rows = this.datamanager._filteredRows;
+    const rows = filtered_rows
+        ? filtered_rows.map((index) => this.datamanager.data[index])
+        : this.datamanager.data;
+
+    return rows.reduce((acc, row) => {
         const value = row[column_field] || 0;
-        if (row.invoice_category === "ITC Reversed") return acc - value;
-        return acc + value;
+        if (row.invoice_category === "ITC Reversed") {
+            return acc - value;
+        } else {
+            return acc + value;
+        }
     }, 0);
 }
+>>>>>>> c54d673d (fix: update custom report total calculation to use filtered rows)
