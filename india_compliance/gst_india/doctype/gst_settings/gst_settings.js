@@ -1,6 +1,18 @@
 // Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and contributors
 // For license information, please see license.txt
 
+const NIL_EXEMPT_E_INVOICE_DESCRIPTIONS = {
+    "Do Not Generate": __(
+        "Skip e-Invoice if all items are non-taxable. In mixed invoices, such items are reported as Other Charges (Taxable Amount = 0).",
+    ),
+    "Generate with Other Charges": __(
+        "Non-taxable items are reported as Other Charges (Taxable Amount = 0) in the e-Invoice.",
+    ),
+    "Generate with Taxable Values": __(
+        "Non-taxable items are reported as taxable in the e-Invoice. Not recommended: Auto populated in GSTR-1 as Zero-Rated, causing inconsistencies.",
+    ),
+};
+
 frappe.ui.form.on("GST Settings", {
     setup(frm) {
         ["cgst_account", "sgst_account", "igst_account", "cess_account", "cess_non_advol_account"].forEach(
