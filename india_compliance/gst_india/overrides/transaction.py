@@ -192,11 +192,8 @@ def get_tds_amount(doc):
         if row.account_head not in tds_accounts:
             continue
 
-        if row.get("add_deduct_tax") and row.add_deduct_tax == "Deduct":
-            tds_amount -= row.base_tax_amount_after_discount_amount
-
-        else:
-            tds_amount += row.base_tax_amount_after_discount_amount
+        multiplier = -1 if row.get("add_deduct_tax") == "Deduct" else 1
+        tds_amount += multiplier * flt(row.base_tax_amount_after_discount_amount)
 
     return tds_amount
 
