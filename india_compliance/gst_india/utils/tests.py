@@ -1,8 +1,19 @@
 import frappe
+from erpnext.controllers.subcontracting_controller import make_rm_stock_entry
+from erpnext.subcontracting.doctype.subcontracting_order.test_subcontracting_order import (
+    create_subcontracting_order,
+)
 from frappe.utils import getdate
 
 from india_compliance.gst_india.constants import SALES_DOCTYPES
 from india_compliance.gst_india.utils import get_gst_accounts_by_type
+
+SUBCONTRACTING_TEST_RM_ITEM_1 = "Subcontracted SRM Item 1"
+SUBCONTRACTING_TEST_RM_ITEM_2 = "Subcontracted SRM Item 2"
+SUBCONTRACTING_TEST_SERVICE_ITEM = "Subcontracted Service Item 1"
+SUBCONTRACTING_TEST_FINISHED_ITEM = "Subcontracted Item SA1"
+SUBCONTRACTING_TEST_FINISHED_ITEM_2 = "Subcontracted Item SA2"
+SUBCONTRACTING_TEST_FINISHED_ITEM_TG = "Subcontracted Item Trading Goods"
 
 
 def create_sales_invoice(**data):
