@@ -1388,7 +1388,7 @@ class ItemGSTDetails:
 
             old = json.loads(row.get(self.tax_details_field(), "{}"))
 
-            tax_difference = row.base_tax_amount_after_discount_amount
+            tax_difference = flt(row.base_tax_amount_after_discount_amount)
             last_item_with_tax = None
 
             # update item taxes
