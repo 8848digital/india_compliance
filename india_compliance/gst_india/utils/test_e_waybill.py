@@ -19,6 +19,9 @@ from india_compliance.gst_india.constants import SERVICE_HSN_PREFIX
 from india_compliance.gst_india.overrides.sales_invoice import (
     is_e_waybill_applicable,
 )
+from india_compliance.gst_india.overrides.test_subcontracting_transaction import (
+    create_subcontracting_data,
+)
 from india_compliance.gst_india.utils import load_doc, parse_datetime
 from india_compliance.gst_india.utils.e_invoice import (
     retry_e_invoice_e_waybill_generation,
@@ -37,11 +40,13 @@ from india_compliance.gst_india.utils.e_waybill import (
     update_vehicle_info,
 )
 from india_compliance.gst_india.utils.tests import (
+    SUBCONTRACTING_TEST_FINISHED_ITEM_TG,
     _append_taxes,
     append_item,
     create_purchase_invoice,
     create_sales_invoice,
     create_transaction,
+    make_subcontracting_stock_entry,
 )
 
 DATETIME_FORMAT = "%d/%m/%Y %I:%M:%S %p"
@@ -52,6 +57,7 @@ class TestEWaybill(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        create_subcontracting_data()
 
         frappe.db.set_single_value(
             "GST Settings",
@@ -126,7 +132,6 @@ class TestEWaybill(FrappeTestCase):
             values=frappe._dict(vehicle_data.get("values")),
         )
 
-        # assertions
         expected_info = [
             "Vehicle Info has been updated by <strong>Administrator</strong>",
             '<table class="table table-bordered">',
@@ -151,6 +156,7 @@ class TestEWaybill(FrappeTestCase):
             "</table>",
         ]
 
+        # assertions
         self.assertDocumentEqual(
             {"name": vehicle_data.get("request_data").get("ewbNo")},
             frappe.get_doc("e-Waybill Log", {"reference_name": si.name}),
@@ -316,7 +322,7 @@ class TestEWaybill(FrappeTestCase):
             e_waybill_cancel_data.get("request_data"),
             EWaybillData(doc).get_data_for_cancellation(frappe._dict(e_waybill_cancel_data.get("values"))),
         )
-    
+
     @change_settings(
         "GST Settings",
         {
@@ -614,7 +620,7 @@ class TestEWaybill(FrappeTestCase):
         # Verify that the function returns an Address document
         self.assertEqual(destination_address.doctype, "Address")
         self.assertIsNotNone(destination_address.name)
-        
+
     def test_get_all_item_details(self):
         """Tests:
         - validate length of GST/HSN Code in items
@@ -1305,10 +1311,6 @@ class TestEWaybill(FrappeTestCase):
 
     @change_settings("GST Settings", {"enable_overseas_transactions": 1})
     def test_e_waybill_for_sez_outward_invoice(self):
-        """Test e-waybill for outward supply to SEZ unit.
-        For outward supply to SEZ, toStateCode should be 96 (Other Countries)
-        and fromStateCode should be company's state.
-        """
         si = create_sales_invoice(
             vehicle_no="GJ07DL9009",
             company_address="_Test Indian Registered Company-Billing",
@@ -1323,11 +1325,7 @@ class TestEWaybill(FrappeTestCase):
         self.assertEqual(e_waybill_data.get("fromStateCode"), 24)
 
     @change_settings("GST Settings", {"enable_overseas_transactions": 1})
-    def test_e_waybill_for_sez_sales_return_invoice(self):
-        """Test e-waybill for sales return from SEZ unit.
-        For return from SEZ, addresses are swapped so fromStateCode should be 96 (Other Countries)
-        and toStateCode should be company's state.
-        """
+    def test_e_waybill_for_sez_sales_return(self):
         si = create_sales_invoice(
             vehicle_no="GJ07DL9009",
             company_address="_Test Indian Registered Company-Billing",
@@ -1338,12 +1336,77 @@ class TestEWaybill(FrappeTestCase):
 
         credit_note = make_return_doc("Sales Invoice", si.name)
         credit_note.vehicle_no = "GJ07DL9009"
+        credit_note.save()
         credit_note.submit()
 
         e_waybill_data = EWaybillData(credit_note).get_data()
 
         self.assertEqual(e_waybill_data.get("fromStateCode"), 96)
         self.assertEqual(e_waybill_data.get("toStateCode"), 24)
+
+    @change_settings(
+        "GST Settings",
+        {"enable_e_waybill_for_sc": 1, "enable_overseas_transactions": 1},
+    )
+    def test_e_waybill_for_sez_stock_entry(self):
+        se = make_subcontracting_stock_entry(
+            bill_from_address="_Test Indian Registered Company-Billing",
+            bill_to_address="_Test Registered Customer-Billing-1",
+            vehicle_no="GJ07DL9009",
+            base_grand_total=100,
+        )
+
+        # reload to trigger onload which sets company_gstin, supplier_gstin
+        se = load_doc("Stock Entry", se.name, "submit")
+
+        e_waybill_data = EWaybillData(se).get_data()
+
+        self.assertEqual(e_waybill_data.get("toStateCode"), 96)
+        self.assertEqual(e_waybill_data.get("fromStateCode"), 24)
+        self.assertEqual(e_waybill_data.get("actToStateCode"), 24)
+
+    @change_settings(
+        "GST Settings",
+        {"enable_e_waybill_from_pi": 1, "enable_overseas_transactions": 1},
+    )
+    def test_e_waybill_for_sez_purchase_invoice(self):
+        pi = create_purchase_invoice(
+            vehicle_no="GJ07DL9009",
+            supplier_address="_Test Registered Supplier-Billing-2",
+            billing_address="_Test Indian Registered Company-Billing",
+            is_out_state=1,
+        )
+
+        e_waybill_data = EWaybillData(pi).get_data()
+
+        # bill_from = supplier (SEZ), bill_to = company
+        self.assertEqual(e_waybill_data.get("fromStateCode"), 96)
+        self.assertEqual(e_waybill_data.get("toStateCode"), 24)
+        self.assertEqual(e_waybill_data.get("actFromStateCode"), 24)
+
+    @change_settings(
+        "GST Settings",
+        {"enable_e_waybill_from_pi": 1, "enable_overseas_transactions": 1},
+    )
+    def test_e_waybill_for_sez_purchase_return(self):
+        pi = create_purchase_invoice(
+            vehicle_no="GJ07DL9009",
+            supplier_address="_Test Registered Supplier-Billing-2",
+            billing_address="_Test Indian Registered Company-Billing",
+            is_out_state=1,
+        )
+
+        debit_note = make_return_doc("Purchase Invoice", pi.name)
+        debit_note.vehicle_no = "GJ07DL9009"
+        debit_note.save()
+        debit_note.submit()
+
+        e_waybill_data = EWaybillData(debit_note).get_data()
+
+        # return swaps from/to: bill_from = company, bill_to = supplier (SEZ)
+        self.assertEqual(e_waybill_data.get("fromStateCode"), 24)
+        self.assertEqual(e_waybill_data.get("toStateCode"), 96)
+        self.assertEqual(e_waybill_data.get("actToStateCode"), 24)
 
     # helper functions
     def _generate_e_waybill(self, docname=None, doctype="Sales Invoice", test_data=None, force=False):
@@ -1447,12 +1510,16 @@ class TestEWaybill(FrappeTestCase):
 
     def _create_stock_entry(self, test_case):
         """Generate Stock Entry to test e-Waybill functionalities"""
-        doc_args = self.e_waybill_test_data.get(test_case).get("kwargs")
-        doc_args.update({"doctype": "Stock Entry"})
+        doc_args = frappe._dict(self.e_waybill_test_data.get(test_case).get("kwargs"))
+        if doc_args.get("purpose") == "Send to Subcontractor":
+            return make_subcontracting_stock_entry(
+                fg_item=SUBCONTRACTING_TEST_FINISHED_ITEM_TG,
+                **doc_args,
+            )
 
-        stock_entry = create_transaction(**doc_args)
-        return stock_entry
-    
+        doc_args["doctype"] = "Stock Entry"
+        return create_transaction(**doc_args)
+
     def _create_purchase_receipt(self, test_case):
         """Generate Purchase Receipt to test e-Waybill functionalities"""
         doc_args = self.e_waybill_test_data.get(test_case).get("kwargs")
