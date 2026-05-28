@@ -8,6 +8,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, getdate
 
+from india_compliance.gst_india.constants import SERVICE_HSN_PREFIX
 from india_compliance.gst_india.utils.gstr_1 import GSTR1_SubCategory
 from india_compliance.gst_india.utils.gstr_1.gstr_1_data import GSTR1Invoices
 
@@ -163,7 +164,7 @@ def process_hsn_data(invoices):
 
 
 @frappe.whitelist()
-def get_json(filters, report_name, data):
+def get_json(filters: str, report_name: str, data: str):
     from india_compliance.gst_india.report.gstr_1.gstr_1 import get_company_gstin_number
 
     filters = json.loads(filters)
@@ -260,7 +261,7 @@ def map_uom(uom, data=None):
         if (
             data
             and (hsn_code := data.get("hsn_code") or "")
-            and hsn_code.startswith("99")
+            and hsn_code.startswith(SERVICE_HSN_PREFIX)
         ):
             return "NA"
 

@@ -11,6 +11,7 @@ from india_compliance.gst_india.constants import (
     GST_TAX_TYPES,
     SUBCONTRACTING_DOCTYPES,
     TAXABLE_GST_TREATMENTS,
+    VALID_HSN_LENGTHS,
 )
 from india_compliance.gst_india.constants.e_waybill import (
     TRANSPORT_MODES,
@@ -95,6 +96,8 @@ class GSTTransactionData:
             for tax_key in tax_total_keys:
                 self.transaction_details[tax_key] += abs(row.get(tax_key[6:], 0))
 
+        pos_state_code = self.doc.place_of_supply.split("-")[0]
+
         self.transaction_details.update(
             {
                 "company_name": self.sanitize_value(self.doc.company),
@@ -125,6 +128,7 @@ class GSTTransactionData:
                 "company_gstin": self.doc.company_gstin,
                 "name": self.doc.name,
                 "other_charges": 0,
+                "pos_state_code": pos_state_code,
             }
         )
 
@@ -189,7 +193,11 @@ class GSTTransactionData:
     def validate_mode_of_transport(self, throw=True):
         def _throw(error):
             if throw:
-                frappe.throw(error, title=_("Invalid Transporter Details"))
+                frappe.throw(
+                    error,
+                    title=_("Invalid Transporter Details"),
+                    exc=frappe.MandatoryError,
+                )
 
         if not (mode_of_transport := self.doc.mode_of_transport):
             return _throw(
@@ -301,7 +309,7 @@ class GSTTransactionData:
 
         _validate_hsn_codes(
             self.doc,
-            valid_hsn_length=[4, 6, 8],
+            valid_hsn_length=VALID_HSN_LENGTHS,
             message=_(
                 "Since HSN/SAC Code is mandatory for generating e-Waybill/e-Invoices.<br>"
             ),
