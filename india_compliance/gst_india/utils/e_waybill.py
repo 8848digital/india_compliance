@@ -1706,6 +1706,11 @@ class EWaybillData(GSTTransactionData):
 
         self.bill_to.legal_name = to_party or self.bill_to.address_title
         self.bill_from.legal_name = from_party or self.bill_from.address_title
+        self.ship_to.legal_name = self.ship_to.address_title
+
+        if transaction_type not in (2, 4):
+            self.ship_to.gstin = None
+            self.ship_to.legal_name = None
 
         if self.doc.gst_category == "SEZ":
             # for SEZ e-Waybill API expects place of supply as 96 - Other Countries
@@ -1797,6 +1802,8 @@ class EWaybillData(GSTTransactionData):
 
             self.bill_from.gstin = _get_sandbox_gstin(self.bill_from, 0)
             self.bill_to.gstin = _get_sandbox_gstin(self.bill_to, 1)
+            if self.ship_to.gstin:
+                self.ship_to.gstin = _get_sandbox_gstin(self.ship_to, 1)
 
         # For regular outward supplies, use Place of Supply.
         if self.doc.get("is_return") or self.doc.gst_category == "SEZ":
@@ -1823,6 +1830,8 @@ class EWaybillData(GSTTransactionData):
             "actFromStateCode": self.ship_from.state_number,
             "toTrdName": self.bill_to.legal_name,
             "toGstin": self.bill_to.gstin,
+            "shipToGSTIN": self.ship_to.gstin,
+            "shipToTradeName": self.ship_to.legal_name,
             "toAddr1": self.ship_to.address_line1,
             "toAddr2": self.ship_to.address_line2,
             "toPlace": self.ship_to.city,
