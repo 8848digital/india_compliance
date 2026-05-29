@@ -18,7 +18,9 @@ class GSTHSNCode(Document):
 
 
 @frappe.whitelist()
-def update_taxes_in_item_master(taxes, hsn_code):
+def update_taxes_in_item_master(taxes: str | list, hsn_code: str):
+    frappe.has_permission("Item", "write", throw=True)
+
     frappe.enqueue(update_item_document, taxes=taxes, hsn_code=hsn_code, queue="long")
     return 1
 
@@ -123,9 +125,8 @@ def validate_hsn_code(hsn_code):
 
     if len(hsn_code) not in valid_hsn_length:
         frappe.throw(
-            _(
-                "HSN/SAC Code should be {0} digits long. Please enter a valid"
-                " HSN/SAC code."
-            ).format(join_list_with_custom_separators(valid_hsn_length)),
+            _("HSN/SAC Code should be {0} digits long. Please enter a valid HSN/SAC code.").format(
+                join_list_with_custom_separators(valid_hsn_length)
+            ),
             title=_("Invalid HSN/SAC"),
         )
