@@ -316,12 +316,11 @@ class GSTR3BReport(Document):
         Tables 4 (ITC) and 5 (nil/exempt inward)
         """
         inward_invoices = GSTR3BInwardInvoices(self._get_filters())
-        self.update_inward_json(
-            inward_invoices.get_section_data("4", group_by_invoice=True),
-            inward_invoices.get_section_data("5", group_by_invoice=True),
-        )
+        inward_data = inward_invoices.get_all_data(group_by_invoice=True)
 
-    def update_inward_json(self, eligible_itc_data, nil_exempt_data):
+        self.update_inward_json(inward_data)
+
+    def update_inward_json(self, data):
         itc_elg = self.report_dict["itc_elg"]
         itc_index = {
             section: {row["ty"]: row for row in rows}
@@ -330,6 +329,7 @@ class GSTR3BReport(Document):
 >>>>>>> 8064d5dbc (refactor: gstr3b data)
         }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
         for key, value in inter_state_supply.items():
             section = inter_state_supply_map.get(key[0])
@@ -342,6 +342,13 @@ class GSTR3BReport(Document):
         for invoice in nil_exempt_data:
             self._update_inward_nil_exempt_section(invoice, inward_sup_index)
 >>>>>>> 8064d5dbc (refactor: gstr3b data)
+=======
+        for invoice in data:
+            if invoice.get("invoice_category") in INWARD_NIL_EXEMPT_SECTION_MAP:
+                self._update_inward_nil_exempt_section(invoice, inward_sup_index)
+            else:
+                self._update_eligible_itc_section(invoice, itc_index, itc_elg["itc_net"])
+>>>>>>> 52993cac6 (refactor: simplify inward JSON update logic in GSTR3BReport)
 
     def process_reverse_charge_inward(self, gstr3b_filters):
         """
