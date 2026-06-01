@@ -301,17 +301,47 @@ class GSTR3BReport(Document):
         inter_state_supply[key]["txval"] += taxable_value
         inter_state_supply[key]["iamt"] += invoice.igst_amount or 0
 
+<<<<<<< HEAD
     def set_inter_state_supply(self, inter_state_supply):
         inter_state_supply_map = {
             "Unregistered": "unreg_details",
             "Registered Composition": "comp_details",
             "UIN Holders": "uin_details",
+=======
+        inter_state_supply[key]["txval"] += invoice.taxable_value or 0
+        inter_state_supply[key]["iamt"] += igst_amount
+
+    def _process_inward_itc(self):
+        """
+        Tables 4 (ITC) and 5 (nil/exempt inward)
+        """
+        inward_invoices = GSTR3BInwardInvoices(self._get_filters())
+        self.update_inward_json(
+            inward_invoices.get_section_data("4", group_by_invoice=True),
+            inward_invoices.get_section_data("5", group_by_invoice=True),
+        )
+
+    def update_inward_json(self, eligible_itc_data, nil_exempt_data):
+        itc_elg = self.report_dict["itc_elg"]
+        itc_index = {
+            section: {row["ty"]: row for row in rows}
+            for section, rows in itc_elg.items()
+            if isinstance(rows, list)
+>>>>>>> 8064d5dbc (refactor: gstr3b data)
         }
 
+<<<<<<< HEAD
         for key, value in inter_state_supply.items():
             section = inter_state_supply_map.get(key[0])
             if section:
                 self.report_dict["inter_sup"][section].append(value)
+=======
+        for invoice in eligible_itc_data:
+            self._update_eligible_itc_section(invoice, itc_index, itc_elg["itc_net"])
+
+        for invoice in nil_exempt_data:
+            self._update_inward_nil_exempt_section(invoice, inward_sup_index)
+>>>>>>> 8064d5dbc (refactor: gstr3b data)
 
     def process_reverse_charge_inward(self, gstr3b_filters):
         """

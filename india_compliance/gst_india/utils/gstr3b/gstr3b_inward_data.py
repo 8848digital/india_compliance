@@ -11,6 +11,66 @@ from india_compliance.gst_india.utils.itc_claim import (
     apply_period_filter as _apply_itc_period_filter,
 )
 
+<<<<<<< HEAD
+=======
+PURCHASE_INVOICE_DOCTYPES = ("Purchase Invoice", "Bill of Entry", "Journal Entry")
+
+ITC_AMOUNT_KEYS = {
+    "iamt": "igst_amount",
+    "camt": "cgst_amount",
+    "samt": "sgst_amount",
+    "csamt": "cess_amount",
+}
+
+INWARD_ITC_SECTION_MAP = {
+    "Import Of Goods": ("itc_avl", "IMPG", 1),
+    "Import Of Service": ("itc_avl", "IMPS", 1),
+    "ITC on Reverse Charge": ("itc_avl", "ISRC", 1),
+    "Input Service Distributor": ("itc_avl", "ISD", 1),
+    "All Other ITC": ("itc_avl", "OTH", 1),
+    "As per rules 42 & 43 of CGST Rules and section 17(5)": ("itc_rev", "RUL", -1),
+    "Others": ("itc_rev", "OTH", -1),
+    "Reclaim of ITC Reversal": ("itc_inelg", "RUL", 0),
+    "ITC restricted due to PoS rules": ("itc_inelg", "OTH", 0),
+}
+
+INWARD_NIL_EXEMPT_SECTION_MAP = {
+    "Composition Scheme, Exempted, Nil Rated": "GST",
+    "Non-GST": "NONGST",
+}
+
+INWARD_SECTION_SUB_CATEGORY_MAP = {
+    "4": {
+        "ITC Available": [
+            "Import Of Goods",
+            "Import Of Service",
+            "ITC on Reverse Charge",
+            "Input Service Distributor",
+            "All Other ITC",
+        ],
+        "ITC Reversed": [
+            "As per rules 42 & 43 of CGST Rules and section 17(5)",
+            "Others",
+        ],
+        "Ineligible ITC": [
+            "Reclaim of ITC Reversal",
+            "ITC restricted due to PoS rules",
+        ],
+    },
+    "5": {
+        "Composition Scheme, Exempted, Nil Rated": [
+            "Composition Scheme, Exempted, Nil Rated",
+        ],
+        "Non-GST": ["Non-GST"],
+    },
+}
+
+INWARD_SECTION_DOCTYPES = {
+    "4": PURCHASE_INVOICE_DOCTYPES,
+    "5": ("Purchase Invoice",),
+}
+
+>>>>>>> 8064d5dbc (refactor: gstr3b data)
 PURCHASE_CATEGORY_CONDITIONS = {
     "Composition Scheme, Exempted, Nil Rated": {
         "category": "is_composition_nil_rated_or_exempted",
@@ -358,7 +418,43 @@ class GSTR3BQuery:
         return query
 
 
+<<<<<<< HEAD
 class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
+=======
+class GSTR3BInwardInvoices(GSTR3BInwardQuery, GSTR3BSubcategory):
+    def __init__(self, filters):
+        super().__init__(filters)
+        self.gst_settings = frappe.get_cached_doc("GST Settings")
+
+    def get_all_data(self, group_by_invoice=False):
+        """Return all inward invoices across all supported doctypes."""
+        invoices = []
+        for doctype in PURCHASE_INVOICE_DOCTYPES:
+            invoices.extend(self.get_data(doctype))
+
+        if not group_by_invoice:
+            return invoices
+
+        return self.get_invoice_wise_data(invoices)
+
+    def get_section_data(self, sub_section, group_by_invoice=False, invoice_sub_categories=None):
+        invoices = []
+
+        for doctype in INWARD_SECTION_DOCTYPES.get(str(sub_section), ()):
+            invoices.extend(self.get_data(doctype, group_by_invoice=group_by_invoice))
+
+        return self.get_filtered_invoices(
+            invoices,
+            invoice_sub_categories or self.get_section_sub_categories(sub_section),
+        )
+
+    @classmethod
+    def get_section_sub_categories(cls, sub_section):
+        section = INWARD_SECTION_SUB_CATEGORY_MAP.get(str(sub_section), {})
+
+        return [category for sub_categories in section.values() for category in sub_categories]
+
+>>>>>>> 8064d5dbc (refactor: gstr3b data)
     def get_data(self, doctype, group_by_invoice=False):
         if doctype == "Purchase Invoice":
             query = self.get_base_purchase_query()
