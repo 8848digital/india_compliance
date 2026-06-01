@@ -14,7 +14,6 @@ from india_compliance.gst_india.doctype.gstr_3b_report.gstr_3b_report import (
     GSTR3BExcelExporter,
 )
 from india_compliance.gst_india.overrides.test_transaction import create_cess_accounts
-from india_compliance.gst_india.report.gstr_3b_details.gstr_3b_details import execute as run_gstr3b_details
 from india_compliance.gst_india.utils import get_gst_accounts_by_type
 from india_compliance.gst_india.utils.itc_claim import format_period
 from india_compliance.gst_india.utils.tests import (
@@ -312,6 +311,7 @@ class TestGSTR3BReport(FrappeTestCase):
         self.assertEqual(output["itc_elg"]["itc_net"]["camt"], -9.0)
         self.assertEqual(output["itc_elg"]["itc_net"]["samt"], -9.0)
 
+<<<<<<< HEAD
     def test_inward_nil_non_gst_report_includes_sez_services(self):
         pi = create_purchase_invoice(
             supplier="_Test Registered Supplier",
@@ -411,6 +411,8 @@ class TestGSTR3BReport(FrappeTestCase):
         self.assertGreater(row["igst_amount"], 0)
 
     @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+=======
+>>>>>>> bf03ff604 (refactor: move gstr3b details test to seperate file)
     def test_gstr_3b_report_includes_boe_in_import_of_goods(self):
         pi = create_purchase_invoice(supplier="_Test Foreign Supplier", update_stock=1)
 
