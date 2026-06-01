@@ -1,6 +1,10 @@
 // Copyright (c) 2016, Frappe Technologies Pvt. Ltd. and contributors
 // For license information, please see license.txt
+<<<<<<< HEAD
+=======
 /* eslint-disable */
+{% include "india_compliance/gst_india/report/utils.js" %}
+>>>>>>> 63bb16e1 (fix: update GSTR-3B details to use sub-section and invoice sub-category filters)
 
 {% include "erpnext/accounts/report/purchase_register/purchase_register.js" %}
 
@@ -107,7 +111,7 @@ frappe.query_reports["GST Purchase Register"] = {
 
 function get_subcategory_options() {
     const sub_section = frappe.query_report.get_filter_value("sub_section");
-    return Object.values(SUB_SECTION_MAPPING[sub_section]).flat();
+    return get_inward_subcategory_options(sub_section);
 }
 
 function custom_report_column_total(...args) {
@@ -117,18 +121,12 @@ function custom_report_column_total(...args) {
     const column_field = args[1].column.fieldname;
     if (!AMOUNT_FIELDS.includes(column_field)) return;
 
-    const filtered_rows = this.datamanager._filteredRows;
-    const rows = filtered_rows
-        ? filtered_rows.map((index) => this.datamanager.data[index])
-        : this.datamanager.data;
-
-    return rows.reduce((acc, row) => {
+    const { data } = this.datamanager;
+    return this.datamanager.getFilteredRowIndices().reduce((acc, index) => {
+        const row = data[index];
         const value = row[column_field] || 0;
-        if (row.invoice_category === "ITC Reversed") {
-            return acc - value;
-        } else {
-            return acc + value;
-        }
+        if (row.invoice_category === "ITC Reversed") return acc - value;
+        return acc + value;
     }, 0);
 }
->>>>>>> c54d673d (fix: update custom report total calculation to use filtered rows)
+>>>>>>> 63bb16e1 (fix: update GSTR-3B details to use sub-section and invoice sub-category filters)
