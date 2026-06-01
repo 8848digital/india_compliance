@@ -1141,11 +1141,24 @@
             "itemList": [
                 {
                     "itemNo": 1,
-                    "productDesc": "Test Trading Goods 1",
-                    "hsnCode": "61149090",
+                    "productDesc": "Subcontracted SRM Item 1",
+                    "hsnCode": "85011011",
                     "qtyUnit": "NOS",
                     "quantity": 1.0,
-                    "taxableAmount": 100.0,
+                    "taxableAmount": 20.0,
+                    "sgstRate": 0.0,
+                    "cgstRate": 0.0,
+                    "igstRate": 0.0,
+                    "cessRate": 0.0,
+                    "cessNonAdvol": 0.0
+                },
+                {
+                    "itemNo": 2,
+                    "productDesc": "Subcontracted SRM Item 2",
+                    "hsnCode": "85011011",
+                    "qtyUnit": "NOS",
+                    "quantity": 1.0,
+                    "taxableAmount": 20.0,
                     "sgstRate": 0.0,
                     "cgstRate": 0.0,
                     "igstRate": 0.0,
@@ -1153,15 +1166,15 @@
                     "cessNonAdvol": 0.0
                 }
             ],
-            "totalValue": 100.0,
+            "totalValue": 40.0,
             "cgstValue": 0,
             "sgstValue": 0,
             "igstValue": 0,
             "cessValue": 0,
             "cessNonAdvolValue": 0,
             "otherValue": 0.0,
-            "totInvValue": 100.0,
-            "toTrdName": "Test Registered Supplier",
+            "totInvValue": 40.0,
+            "toTrdName": "_Test Registered Supplier",
             "toGstin": "05AAACG2140A1ZL",
             "toAddr1": "Test Address - 7",
             "toPlace": "Test City",
@@ -1171,7 +1184,7 @@
             "transMode": 1,
             "transDistance": 1,
             "vehicleNo": "GJ07DL9009",
-            "mainHsnCode": "61149090",
+            "mainHsnCode": "85011011",
             "vehicleType": "R"
         },
         "params": "action=GENEWAYBILL",
@@ -1355,6 +1368,79 @@
         "sync_gstin_response_inactive": {
             "Status": "CAN",
             "StatusDesc": "Cancelled"
+        }
+    },
+    "overseas_customer_domestic_shipping": {
+        "kwargs": {
+            "customer": "_Test Foreign Customer-1",
+            "customer_address": "_Test Foreign Customer-1-Billing",
+            "shipping_address_name": "_Test Foreign Customer-1-Shipping",
+            "vehicle_no": "GJ07DL9009",
+            "company_address": "_Test Indian Registered Company-Billing",
+            "is_in_state": 1
+        },
+        "request_data": {
+            "userGstin": "05AAACG2115R1ZN",
+            "supplyType": "O",
+            "subSupplyType": 1,
+            "docType": "INV",
+            "docNo": "test_invoice_no",
+            "docDate": "09/01/2026",
+            "transactionType": 2,
+            "fromTrdName": "_Test Indian Registered Company",
+            "fromGstin": "05AAACG2115R1ZN",
+            "fromAddr1": "Test Address - 1",
+            "fromPlace": "Test City",
+            "fromPincode": 380015,
+            "fromStateCode": 24,
+            "actFromStateCode": 24,
+            "toTrdName": "_Test Foreign Customer-1",
+            "toGstin": "URP",
+            "toAddr1": "Test Address - 13",
+            "toPlace": "Test City",
+            "toPincode": 380015,
+            "toStateCode": 24,
+            "actToStateCode": 24,
+            "totalValue": 100.0,
+            "cgstValue": 9.0,
+            "sgstValue": 9.0,
+            "igstValue": 0,
+            "cessValue": 0,
+            "cessNonAdvolValue": 0,
+            "otherValue": 0.0,
+            "totInvValue": 118.0,
+            "transMode": 1,
+            "transDistance": 10,
+            "transporterName": "Test Common Supplier",
+            "vehicleNo": "GJ07DL9009",
+            "vehicleType": "R",
+            "itemList": [
+                {
+                    "itemNo": 1,
+                    "productDesc": "Test Trading Goods 1",
+                    "hsnCode": "61149090",
+                    "qtyUnit": "NOS",
+                    "quantity": 1.0,
+                    "taxableAmount": 100.0,
+                    "sgstRate": 9.0,
+                    "cgstRate": 9.0,
+                    "igstRate": 0,
+                    "cessRate": 0,
+                    "cessNonAdvol": 0
+                }
+            ],
+            "mainHsnCode": "61149090"
+        },
+        "params": "action=GENEWAYBILL",
+        "response_data": {
+            "message": "E-Way Bill is generated successfully",
+            "result": {
+                "alert": "",
+                "ewayBillDate": "09/01/2026 12:00:00 PM",
+                "ewayBillNo": 391010000001,
+                "validUpto": "10/01/2026 11:59:00 PM"
+            },
+            "success": true
         }
     }
 }

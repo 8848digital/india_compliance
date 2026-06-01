@@ -17,6 +17,8 @@ from india_compliance.gst_india.utils.gstin_info import get_gstin_info
 
 @frappe.whitelist()
 def enable_setup_wizard_complete():
+    frappe.only_for("System Manager")
+
     frappe.db.set_value(
         "Installed Application",
         {"app_name": "india_compliance"},
@@ -64,24 +66,28 @@ def configure_audit_trail(params):
 
 
 def setup_company_taxes(params):
-    if not params.company_gstin:
+    if params.country != "India":
         return
 
     if not (params.company_name and frappe.db.exists("Company", params.company_name)):
         return
 
+    setup_tax_template(params)
+
+    if not params.company_gstin:
+        return
+
     try:
         validate_gstin(params.company_gstin)
     except frappe.ValidationError:
-        params.company_gstin = ""
+        params.company_gstin = None
 
     gstin_info = frappe._dict()
-    if can_fetch_gstin_info():
+    if params.company_gstin and can_fetch_gstin_info():
         gstin_info = get_gstin_info(params.company_gstin, throw_error=False)
 
     update_company_info(params, gstin_info.gst_category)
     create_address(gstin_info, params)
-    setup_tax_template(params)
 
 
 def update_company_info(params, gst_category=None):
@@ -101,9 +107,7 @@ def create_address(gstin_info: dict, params: dict) -> None:
         return
 
     address = frappe.new_doc("Address")
-    address.append(
-        "links", {"link_doctype": "Company", "link_name": params.company_name}
-    )
+    address.append("links", {"link_doctype": "Company", "link_name": params.company_name})
 
     for key, value in gstin_info.permanent_address.items():
         setattr(address, key, value)
@@ -115,9 +119,7 @@ def create_address(gstin_info: dict, params: dict) -> None:
 
 
 def can_fetch_gstin_info():
-    return is_api_enabled() and not frappe.get_cached_value(
-        "GST Settings", None, "sandbox_mode"
-    )
+    return is_api_enabled() and not frappe.get_cached_value("GST Settings", None, "sandbox_mode")
 
 
 def setup_tax_template(params):
@@ -125,6 +127,4 @@ def setup_tax_template(params):
         params.default_gst_rate = "18.0"
 
     make_default_tax_templates(params.company_name, params.default_gst_rate)
-    frappe.db.set_value(
-        "Company", params.company_name, "default_gst_rate", params.default_gst_rate
-    )
+    frappe.db.set_value("Company", params.company_name, "default_gst_rate", params.default_gst_rate)
