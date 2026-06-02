@@ -52,12 +52,16 @@ repos:
                     india_compliance/templates/includes/.*
                 )$
 
-    - repo: https://github.com/astral-sh/ruff-pre-commit
-      rev: v0.2.0
-      hooks:
-          - id: ruff
-            name: "Run ruff import sorter"
-            args: ["--select=I", "--fix"]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.8
+    hooks:
+      - id: ruff
+        name: "Remove unused imports"
+        args: ["--select=F401", "--fix"]
+
+      - id: ruff
+        name: "Run ruff import sorter"
+        args: ["--select=I", "--fix"]
 
           - id: ruff
             name: "Run ruff linter"
