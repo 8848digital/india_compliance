@@ -73,9 +73,12 @@ class GSTTransactionData:
         # Initialize all tax totals to 0
         self.transaction_details.update({key: 0 for key in tax_total_keys})
 
-        for row in self.item_details_list or []:
-            total += row.taxable_value + row.get("other_charges", 0)
-            total_taxable_value += row.taxable_value
+        for row in self.doc.items:
+            taxable_value = self.rounded(row.taxable_value)
+            total += taxable_value
+
+            if row.gst_treatment in TAXABLE_GST_TREATMENTS:
+                total_taxable_value += taxable_value
 
             if self.is_purchase_rcm:
                 continue
