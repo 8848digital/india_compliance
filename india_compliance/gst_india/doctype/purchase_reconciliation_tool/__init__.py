@@ -1231,16 +1231,11 @@ class ReconciledData(BaseReconciliation):
             )
 
     def get_gstin_status_map(self, reconciliation_data):
-        supplier_gstins = set(
-            filter(
-                None,
-                [
-                    doc.get("_purchase_invoice", frappe._dict()).get("supplier_gstin")
-                    or doc.get("_inward_supply", frappe._dict()).get("supplier_gstin")
-                    for doc in reconciliation_data
-                ],
-            )
-        )
+        supplier_gstins = {
+            doc.get("_purchase_invoice", frappe._dict()).get("supplier_gstin")
+            or doc.get("_inward_supply", frappe._dict()).get("supplier_gstin")
+            for doc in reconciliation_data
+        } - {None, ""}
 
         if not supplier_gstins:
             return frappe._dict()
