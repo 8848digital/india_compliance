@@ -935,6 +935,7 @@ class ReconciledData(BaseReconciliation):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.gstin_party_map = frappe._dict()
+        self.gstin_map = frappe._dict()
         self.dimension_fields = [*get_accounting_dimensions(), "cost_center", "project"]
 
     def get_consolidated_data(
@@ -1119,6 +1120,8 @@ class ReconciledData(BaseReconciliation):
             "irn_source": "",
             "irn_number": "",
             "irn_gen_date": "",
+            "gstin_status": "",
+            "gstin_cancelled_date": "",
         }
 
         for data in reconciliation_data:
@@ -1170,6 +1173,8 @@ class ReconciledData(BaseReconciliation):
                 "irn_source": inward_supply.get("irn_source"),
                 "irn_number": inward_supply.get("irn_number"),
                 "irn_gen_date": format_date(inward_supply.get("irn_gen_date")),
+                "gstin_status": gstin_info.get("status") or "",
+                "gstin_cancelled_date": gstin_info.get("cancelled_date") or "",
             }
         )
 
@@ -1183,11 +1188,16 @@ class ReconciledData(BaseReconciliation):
             data.action = "Ignore" if purchase.get("reconciliation_status") == "Ignored" else "No Action"
 
     def get_gstin_status_map(self, reconciliation_data):
-        supplier_gstins = {
-            doc.get("_purchase_invoice", frappe._dict()).get("supplier_gstin")
-            or doc.get("_inward_supply", frappe._dict()).get("supplier_gstin")
-            for doc in reconciliation_data
-        } - {None, ""}
+        supplier_gstins = set(
+            filter(
+                None,
+                [
+                    doc.get("_purchase_invoice", frappe._dict()).get("supplier_gstin")
+                    or doc.get("_inward_supply", frappe._dict()).get("supplier_gstin")
+                    for doc in reconciliation_data
+                ],
+            )
+        )
 
         if not supplier_gstins:
             return frappe._dict()
