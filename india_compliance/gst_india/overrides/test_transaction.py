@@ -17,7 +17,24 @@ from erpnext.controllers.accounts_controller import (
 )
 from erpnext.controllers.sales_and_purchase_return import make_return_doc
 from erpnext.controllers.taxes_and_totals import get_regional_round_off_accounts
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+from erpnext.selling.doctype.sales_order.sales_order import (
+    make_purchase_order,
+)
+from erpnext.selling.doctype.sales_order.sales_order import (
+    make_sales_invoice as make_sales_invoice_from_so,
+)
+>>>>>>> 581bff60 (test: added tests to ensure taxes computation is not reqd in before_save)
 from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
+=======
+from erpnext.selling.doctype.sales_order.mapper import (
+    make_delivery_note,
+    make_purchase_order,
+)
+from erpnext.stock.doctype.delivery_note.mapper import make_sales_invoice
+>>>>>>> 313b964d (test: added tests to ensure taxes computation is not reqd in before_save)
 from erpnext.stock.doctype.purchase_receipt.purchase_receipt import (
     update_regional_gl_entries,
 )
@@ -1365,6 +1382,80 @@ class TestItemUpdate(FrappeTestCase):
                 doc.items[1],
             )
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_overseas_order_add_non_gst_item_after_submit(self):
+        """
+        Adding a Non-GST item to a submitted SEZ/overseas Sales Order via the
+        Update Items dialog must not raise. before_update_after_submit normalizes
+        gst_treatment (to "Zero-Rated") before validating the Non-GST/GST mix.
+        """
+        so = create_transaction(
+            doctype="Sales Order",
+            customer="_Test Foreign Customer",
+            item_code="_Test Trading Goods 1",
+            qty=1,
+            rate=100,
+        )
+        self.assertEqual(so.items[0].gst_treatment, "Zero-Rated")
+=======
+    def test_gst_treatment_recomputed_when_item_updated_after_submit(self):
+        # Update Items must recompute GST treatment, not just amounts; this
+        # post-submit path skips validate.
+        for doctype in ["Sales Order", "Purchase Order"]:
+            doc = self.create_order(doctype)
+            item = doc.items[0]
+
+            item_to_update = [
+                {
+                    "item_code": item.item_code,
+                    "qty": item.qty,
+                    "rate": item.rate,
+                    "docname": item.name,
+                    "name": item.name,
+                    "idx": item.idx,
+                },
+                {"item_code": "_Test Non GST Item", "qty": 1, "rate": 50, "idx": 2},
+            ]
+
+            update_child_qty_rate(doctype, json.dumps(item_to_update), doc.name)
+            doc = frappe.get_doc(doctype, doc.name)
+
+            self.assertDocumentEqual(
+                {
+                    "gst_treatment": "Non-GST",
+                    "cgst_amount": 0,
+                    "sgst_amount": 0,
+                    "igst_amount": 0,
+                },
+                doc.items[1],
+            )
+            self.assertEqual(doc.items[0].gst_treatment, "Taxable")
+
+>>>>>>> 313b964d (test: added tests to ensure taxes computation is not reqd in before_save)
+
+        item = so.items[0]
+        items = [
+            {
+                "item_code": item.item_code,
+                "qty": item.qty,
+                "rate": item.rate,
+                "docname": item.name,
+                "name": item.name,
+                "idx": item.idx,
+            },
+            {"item_code": "_Test Non GST Item", "qty": 1, "rate": 50, "idx": 2},
+        ]
+
+        update_child_qty_rate("Sales Order", json.dumps(items), so.name)
+        so = frappe.get_doc("Sales Order", so.name)
+
+        for so_item in so.items:
+            self.assertEqual(so_item.gst_treatment, "Zero-Rated")
+
+>>>>>>> 581bff60 (test: added tests to ensure taxes computation is not reqd in before_save)
 
 class TestPlaceOfSupply(FrappeTestCase):
     def test_pos_sales_invoice(self):
@@ -1409,3 +1500,248 @@ class TestPlaceOfSupply(FrappeTestCase):
 
         doc = create_transaction(**doc_args)
         self.assertEqual(doc.place_of_supply, "24-Gujarat")  # Company GSTIN
+<<<<<<< HEAD
+=======
+
+    def test_correct_place_of_supply_on_address_update_by_erpnext(self):
+        """
+        Correct place of supply when ERPNext updates the party address.
+
+        With change in address of party by erpnext, place of supply should be corrected
+        and taxes should be applied accordingly on new document creation.
+        """
+        doc = create_transaction(
+            doctype="Sales Invoice",
+            customer="_Test Registered Composition Customer",
+            do_not_save=True,
+        )
+        doc.place_of_supply = "24-Gujarat"
+        doc.insert()
+
+        # place_of_supply must be corrected to customer's state (Karnataka)
+        self.assertEqual(doc.place_of_supply, "29-Karnataka")
+
+        # check gst_tax_type of tax table
+        for tax in doc.taxes:
+            self.assertEqual(tax.gst_tax_type, "igst")
+
+    def test_place_of_supply_when_purchase_order_created_from_sales_order(self):
+        """
+        Place_of_supply on a Purchase Order created from a Sales Order must
+        reflect the buyer/company context, not the customer's state inherited
+        from the source Sales Order.
+        """
+        so = create_transaction(
+            doctype="Sales Order",
+            customer="_Test Registered Composition Customer",
+            do_not_submit=True,
+        )
+        so.submit()
+        self.assertEqual(so.place_of_supply, "29-Karnataka")
+
+        selected_items = [{"item_code": so.items[0].item_code, "supplier": "_Test Registered Supplier"}]
+
+        po = make_purchase_order(so.name, selected_items=selected_items)
+        self.assertTrue(po)
+
+        if not po.supplier:
+            self.skipTest("erpnext v15 make_purchase_order does not propagate selected_items supplier to PO")
+
+        # Both supplier and company are in Gujarat (24), so the PO is intra-state
+        # and place_of_supply must NOT inherit the customer's state from the SO.
+        self.assertEqual(po.place_of_supply, "24-Gujarat")
+
+        # Supplier GST category and taxes must be correctly set
+        self.assertEqual(po.gst_category, "Registered Regular")
+        self.assertTrue(po.taxes_and_charges)
+        self.assertTrue(po.taxes)
+
+    def test_gst_details_recomputed_through_sales_order_to_delivery_note(self):
+        # Mapper recalcs taxes outside validate; saved DN must recompute GST details.
+        so = create_transaction(
+            doctype="Sales Order",
+            customer="_Test Registered Customer",
+            item_code="_Test Trading Goods 1",
+            qty=1,
+            rate=100,
+            is_in_state=1,  # intra-state -> CGST + SGST
+        )
+        expected = {
+            "gst_treatment": "Taxable",
+            "taxable_value": 100,
+            "igst_amount": 0,
+            "cgst_amount": 9,
+            "sgst_amount": 9,
+        }
+        self.assertDocumentEqual(expected, so.items[0])
+
+        dn = make_delivery_note(so.name)
+        dn.insert()
+        self.assertDocumentEqual(expected, dn.items[0])
+
+    def test_gst_details_recomputed_on_cross_mapping_sales_order_to_purchase_order(self):
+        # Cross-mapping must reset GST to the purchase side; sales IGST must not leak.
+        so = create_transaction(
+            doctype="Sales Order",
+            customer="_Test Registered Composition Customer",
+            item_code="_Test Trading Goods 1",
+            qty=1,
+            rate=100,
+            is_out_state=1,  # inter-state -> IGST
+        )
+        self.assertEqual(so.place_of_supply, "29-Karnataka")
+        self.assertEqual({tax.gst_tax_type for tax in so.taxes}, {"igst"})
+
+        selected_items = [{"item_code": so.items[0].item_code, "supplier": "_Test Registered Supplier"}]
+        po = make_purchase_order(so.name, selected_items=selected_items)[0]
+
+        # after_mapping resets to intra-state
+        self.assertEqual(po.place_of_supply, "24-Gujarat")
+        self.assertEqual({tax.gst_tax_type for tax in po.taxes}, {"cgst", "sgst"})
+
+    def test_place_of_supply_when_sales_order_mapped_from_purchase_order(self):
+        """
+        Place_of_supply on a Sales Order mapped from a Purchase Order.
+        (make_inter_company_sales_order)
+        """
+
+        po = create_transaction(
+            doctype="Purchase Order",
+            supplier="_Test Registered InterState Supplier",
+        )
+        # Supplier is in Tamil Nadu (33), company is in Gujarat (24);
+        # for a purchase, place_of_supply tracks the company side.
+        self.assertEqual(po.place_of_supply, "24-Gujarat")
+
+        def set_customer(source, target):
+            target.customer = "_Test Registered Composition Customer"
+            target.delivery_date = po.transaction_date
+
+        so = get_mapped_doc(
+            "Purchase Order",
+            po.name,
+            {
+                "Purchase Order": {
+                    "doctype": "Sales Order",
+                    "field_no_map": ["taxes_and_charges"],
+                },
+                "Purchase Order Item": {
+                    "doctype": "Sales Order Item",
+                    "field_map": {"schedule_date": "delivery_date"},
+                },
+            },
+            postprocess=set_customer,
+        )
+
+        # Customer is in Karnataka (29). place_of_supply on the SO must reflect
+        # that, not the PO's "24-Gujarat".
+        self.assertEqual(so.place_of_supply, "29-Karnataka")
+
+    def test_place_of_supply_when_purchase_receipt_mapped_from_delivery_note(self):
+        """
+        place_of_supply on a Purchase Receipt mapped from a Delivery Note
+        (make_inter_company_purchase_receipt).
+        """
+        dn = create_transaction(
+            doctype="Delivery Note",
+            customer="_Test Registered Composition Customer",
+        )
+        # Customer is in Karnataka (29), so the DN's place_of_supply is 29.
+        self.assertEqual(dn.place_of_supply, "29-Karnataka")
+
+        def set_supplier(source, target):
+            target.supplier = "_Test Registered Supplier"
+
+        pr = get_mapped_doc(
+            "Delivery Note",
+            dn.name,
+            {
+                "Delivery Note": {
+                    "doctype": "Purchase Receipt",
+                    "field_no_map": ["taxes_and_charges"],
+                },
+                "Delivery Note Item": {
+                    "doctype": "Purchase Receipt Item",
+                },
+            },
+            postprocess=set_supplier,
+        )
+
+        # Supplier and company are both in Gujarat (24). place_of_supply on the
+        # PR must reflect the receiving-company side, not the DN's Karnataka.
+        self.assertEqual(pr.place_of_supply, "24-Gujarat")
+
+    def test_place_of_supply_when_delivery_note_mapped_from_purchase_receipt(self):
+        """
+        place_of_supply on a Delivery Note mapped from a Purchase Receipt
+        (make_inter_company_delivery_note)
+        """
+
+        pr = create_transaction(doctype="Purchase Receipt")
+        # Supplier and company are in Gujarat (24), so the PR's POS is 24-Gujarat.
+        self.assertEqual(pr.place_of_supply, "24-Gujarat")
+
+        def set_customer(source, target):
+            target.customer = "_Test Registered Composition Customer"
+
+        dn = get_mapped_doc(
+            "Purchase Receipt",
+            pr.name,
+            {
+                "Purchase Receipt": {
+                    "doctype": "Delivery Note",
+                    "field_no_map": ["taxes_and_charges"],
+                },
+                "Purchase Receipt Item": {
+                    "doctype": "Delivery Note Item",
+                },
+            },
+            postprocess=set_customer,
+        )
+
+        # Customer is in Karnataka (29). place_of_supply on the DN must reflect
+        # that, not the PR's "24-Gujarat".
+        self.assertEqual(dn.place_of_supply, "29-Karnataka")
+
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_make_sales_invoice_from_sales_order_with_non_gst_items(self):
+        """
+        make_sales_invoice_from_so must not raise when a Sales Order for a SEZ
+        customer contains items where some have a Non-GST item_tax_template and
+        one has no template.
+        Issue in mapping because gst_treatment was not set.
+        """
+        no_template_item = "_Test Item No Tax Template"
+        if not frappe.db.exists("Item", no_template_item):
+            frappe.get_doc(
+                {
+                    "doctype": "Item",
+                    "item_code": no_template_item,
+                    "item_name": no_template_item,
+                    "item_group": "Products",
+                    "stock_uom": "Nos",
+                    "is_stock_item": 0,
+                    "gst_hsn_code": "61149090",
+                }
+            ).insert()
+
+        # SEZ billing address forces "Zero-Rated" on all SO items so the order
+        # can be submitted despite having mixed-template items.
+        so = create_transaction(
+            doctype="Sales Order",
+            item_code="_Test Non GST Item",  # has "Non-GST - _TIRC" template
+            do_not_save=True,
+        )
+        so.customer_address = "_Test Registered Customer-Billing-1"  # SEZ, gst_category="SEZ"
+        so.gst_category = "SEZ"
+        append_item(
+            so, frappe._dict(item_code=no_template_item, rate=100, item_tax_template="Non-GST - _TIRC")
+        )  # non-gst tax template to replicate the mix
+        so.insert()
+        so.submit()
+
+        si = make_sales_invoice_from_so(so.name)
+
+        self.assertIsNotNone(si)
+        self.assertEqual(si.doctype, "Sales Invoice")
+>>>>>>> 581bff60 (test: added tests to ensure taxes computation is not reqd in before_save)
