@@ -17,24 +17,14 @@ from erpnext.controllers.accounts_controller import (
 )
 from erpnext.controllers.sales_and_purchase_return import make_return_doc
 from erpnext.controllers.taxes_and_totals import get_regional_round_off_accounts
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
 from erpnext.selling.doctype.sales_order.sales_order import (
+    make_delivery_note,
     make_purchase_order,
 )
 from erpnext.selling.doctype.sales_order.sales_order import (
     make_sales_invoice as make_sales_invoice_from_so,
 )
->>>>>>> 581bff60 (test: added tests to ensure taxes computation is not reqd in before_save)
 from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
-=======
-from erpnext.selling.doctype.sales_order.mapper import (
-    make_delivery_note,
-    make_purchase_order,
-)
-from erpnext.stock.doctype.delivery_note.mapper import make_sales_invoice
->>>>>>> 313b964d (test: added tests to ensure taxes computation is not reqd in before_save)
 from erpnext.stock.doctype.purchase_receipt.purchase_receipt import (
     update_regional_gl_entries,
 )
@@ -1382,25 +1372,6 @@ class TestItemUpdate(FrappeTestCase):
                 doc.items[1],
             )
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
-    def test_overseas_order_add_non_gst_item_after_submit(self):
-        """
-        Adding a Non-GST item to a submitted SEZ/overseas Sales Order via the
-        Update Items dialog must not raise. before_update_after_submit normalizes
-        gst_treatment (to "Zero-Rated") before validating the Non-GST/GST mix.
-        """
-        so = create_transaction(
-            doctype="Sales Order",
-            customer="_Test Foreign Customer",
-            item_code="_Test Trading Goods 1",
-            qty=1,
-            rate=100,
-        )
-        self.assertEqual(so.items[0].gst_treatment, "Zero-Rated")
-=======
     def test_gst_treatment_recomputed_when_item_updated_after_submit(self):
         # Update Items must recompute GST treatment, not just amounts; this
         # post-submit path skips validate.
@@ -1434,7 +1405,21 @@ class TestItemUpdate(FrappeTestCase):
             )
             self.assertEqual(doc.items[0].gst_treatment, "Taxable")
 
->>>>>>> 313b964d (test: added tests to ensure taxes computation is not reqd in before_save)
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_overseas_order_add_non_gst_item_after_submit(self):
+        """
+        Adding a Non-GST item to a submitted SEZ/overseas Sales Order via the
+        Update Items dialog must not raise. before_update_after_submit normalizes
+        gst_treatment (to "Zero-Rated") before validating the Non-GST/GST mix.
+        """
+        so = create_transaction(
+            doctype="Sales Order",
+            customer="_Test Foreign Customer",
+            item_code="_Test Trading Goods 1",
+            qty=1,
+            rate=100,
+        )
+        self.assertEqual(so.items[0].gst_treatment, "Zero-Rated")
 
         item = so.items[0]
         items = [
@@ -1455,7 +1440,6 @@ class TestItemUpdate(FrappeTestCase):
         for so_item in so.items:
             self.assertEqual(so_item.gst_treatment, "Zero-Rated")
 
->>>>>>> 581bff60 (test: added tests to ensure taxes computation is not reqd in before_save)
 
 class TestPlaceOfSupply(FrappeTestCase):
     def test_pos_sales_invoice(self):
@@ -1500,8 +1484,6 @@ class TestPlaceOfSupply(FrappeTestCase):
 
         doc = create_transaction(**doc_args)
         self.assertEqual(doc.place_of_supply, "24-Gujarat")  # Company GSTIN
-<<<<<<< HEAD
-=======
 
     def test_correct_place_of_supply_on_address_update_by_erpnext(self):
         """
@@ -1744,4 +1726,3 @@ class TestPlaceOfSupply(FrappeTestCase):
 
         self.assertIsNotNone(si)
         self.assertEqual(si.doctype, "Sales Invoice")
->>>>>>> 581bff60 (test: added tests to ensure taxes computation is not reqd in before_save)
