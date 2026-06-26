@@ -195,7 +195,6 @@ def download_json_file():
     frappe.response["type"] = "download"
 =======
     return {
-        "report_name": report_name,
         "filename": frappe.scrub(report_name) + ".json",
         "data": gst_json,
     }
