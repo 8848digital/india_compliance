@@ -181,6 +181,7 @@ def get_json(filters: str, report_name: str, data: str):
 
     gst_json["hsn"] = get_hsn_wise_json_data(report_data, filters)
 
+<<<<<<< HEAD
     return {"report_name": report_name, "data": gst_json}
 
 
@@ -192,6 +193,13 @@ def download_json_file():
     frappe.response["filecontent"] = data["data"]
     frappe.response["content_type"] = "application/json"
     frappe.response["type"] = "download"
+=======
+    return {
+        "report_name": report_name,
+        "filename": frappe.scrub(report_name) + ".json",
+        "data": gst_json,
+    }
+>>>>>>> 9b7236de (refactor: download HSN summary JSON client-side, drop extra API call)
 
 
 def get_hsn_wise_json_data(report_data, filters):
