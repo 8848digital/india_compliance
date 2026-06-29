@@ -14,23 +14,6 @@ on:
 
   pull_request:
 
-    push:
-        branches: [develop, version-14-hotfix, version-14, version-15-hotfix, version-15]
-        paths-ignore:
-            - "**.css"
-            - "**.js"
-            - "**.md"
-            - "**.html"
-            - "**.csv"
-=======
-      app_name:
-        type: string
-
-    secrets:
-      codecov_token:
-
-  pull_request:
-
   push:
     branches:
       [
@@ -106,31 +89,6 @@ jobs:
 
     name: Python Unit Tests
 
-<<<<<<< HEAD
-        services:
-            mariadb:
-                image: mariadb:10.6
-                env:
-                    MARIADB_ROOT_PASSWORD: 'travis'
-                ports:
-                    - 3306:3306
-                options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
-
-        steps:
-            - name: Clone
-              uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-            - name: Setup Node
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 20
-                  check-latest: true
-=======
     services:
       mariadb:
         image: mariadb:11.8
@@ -154,35 +112,12 @@ jobs:
         with:
           node-version: 24
           check-latest: true
->>>>>>> a57edf10 (chore: format YAML files and update pre-commit configuration)
 
       - name: Add to Hosts
         run: echo "127.0.0.1 test_site" | sudo tee -a /etc/hosts
 
-<<<<<<< HEAD
-            - name: Cache pip
-              uses: actions/cache@v4
-              with:
-                  path: ~/.cache/pip
-                  key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt') }}
-                  restore-keys: |
-                      ${{ runner.os }}-pip-
-                      ${{ runner.os }}-
-
-            - name: Cache node modules
-              uses: actions/cache@v4
-              env:
-                  cache-name: cache-node-modules
-              with:
-                  path: ~/.npm
-                  key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
-                  restore-keys: |
-                      ${{ runner.os }}-build-${{ env.cache-name }}-
-                      ${{ runner.os }}-build-
-                      ${{ runner.os }}-
-=======
       - name: Cache pip
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt') }}
@@ -191,7 +126,7 @@ jobs:
             ${{ runner.os }}-
 
       - name: Cache node modules
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         env:
           cache-name: cache-node-modules
         with:
@@ -201,29 +136,18 @@ jobs:
             ${{ runner.os }}-build-${{ env.cache-name }}-
             ${{ runner.os }}-build-
             ${{ runner.os }}-
->>>>>>> a57edf10 (chore: format YAML files and update pre-commit configuration)
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
 
-<<<<<<< HEAD
-            - uses: actions/cache@v4
-              id: yarn-cache
-              with:
-                  path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-                  key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-                  restore-keys: |
-                      ${{ runner.os }}-yarn-
-=======
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         id: yarn-cache
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
           key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
             ${{ runner.os }}-yarn-
->>>>>>> a57edf10 (chore: format YAML files and update pre-commit configuration)
 
       - name: Install
         run: |
@@ -265,4 +189,3 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           token: ${{ secrets.codecov_token || secrets.CODECOV_TOKEN }}
->>>>>>> a57edf10 (chore: format YAML files and update pre-commit configuration)
