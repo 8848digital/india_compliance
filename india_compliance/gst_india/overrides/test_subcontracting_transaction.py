@@ -21,7 +21,6 @@ from erpnext.subcontracting.doctype.subcontracting_order.test_subcontracting_ord
     create_subcontracting_order,
 )
 from frappe.tests.utils import FrappeTestCase
-from frappe.tests import IntegrationTestCase, UnitTestCase
 
 from india_compliance.gst_india.utils.taxes_controller import (
     CustomTaxController,
@@ -578,7 +577,7 @@ def _make_taxes_controller_doc(items=None, taxes=None):
     return json.loads(json.dumps(data), object_hook=frappe._dict)
 
 
-class TestCustomTaxController(UnitTestCase):
+class TestCustomTaxController(FrappeTestCase):
     def test_get_rows_to_update_defaults_empty_items_to_list(self):
         """Missing/null items (new doc before any row is added) must yield [], not None."""
         doc = _make_taxes_controller_doc(items=None, taxes=[{"name": "tax1"}])
