@@ -18,7 +18,6 @@ from erpnext.controllers.accounts_controller import (
 )
 from erpnext.controllers.stock_controller import show_accounting_ledger_preview
 from frappe.tests.utils import FrappeTestCase
-from frappe.tests import IntegrationTestCase
 from frappe.utils import flt, getdate
 
 from india_compliance.gst_india.utils.gstr_1 import GSTR1_DataField as inv_f
@@ -604,7 +603,7 @@ MATRIX_RECONCILED_GL_SEPARATE: dict = {
 }
 
 
-class TestPaymentReconciliationMatrix(IntegrationTestCase):
+class TestPaymentReconciliationMatrix(FrappeTestCase):
     # ---- the 8 core cells (no separate party account) ----
 
     def test_excl_payment_excl_invoice_via_reconcile_tool(self):
