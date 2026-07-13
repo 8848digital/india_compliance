@@ -179,9 +179,7 @@ class GSTR3BReport(Document):
             raise e
 
         finally:
-            frappe.publish_realtime(
-                "gstr3b_report_generation", doctype=self.doctype, docname=self.name
-            )
+            frappe.publish_realtime("gstr3b_report_generation", doctype=self.doctype, docname=self.name)
 
     def _get_gstr1_filters(self):
         """Filters for GSTR1Invoices (Sales Invoice data)."""
