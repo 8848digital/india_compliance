@@ -10,7 +10,11 @@ import frappe
 from frappe import _
 from frappe.utils import getdate
 
-from india_compliance.gst_india.utils import get_data_file_path, get_period
+from india_compliance.gst_india.utils import (
+    get_data_file_path,
+    get_period,
+    validate_gstin_permission,
+)
 from india_compliance.gst_india.utils.exporter import ExcelExporter
 from india_compliance.gst_india.utils.gstr_1 import (
     HSN_BIFURCATION_FROM,
@@ -2195,6 +2199,7 @@ def set_section_preference(sections: str | list[str] | None = None):
 
 
 @frappe.whitelist()
+@validate_gstin_permission(doctype="GST Return Log")
 def download_filed_as_excel(
     company_gstin: str, month_or_quarter: str, year: str, sections: str | list[str] | None = None
 ):
@@ -2205,6 +2210,7 @@ def download_filed_as_excel(
 
 
 @frappe.whitelist()
+@validate_gstin_permission(doctype="GST Return Log")
 def download_books_as_excel(company_gstin: str, month_or_quarter: str, year: str):
     frappe.has_permission("GSTR-1 Beta", "export", throw=True)
 
@@ -2213,6 +2219,7 @@ def download_books_as_excel(company_gstin: str, month_or_quarter: str, year: str
 
 
 @frappe.whitelist()
+@validate_gstin_permission(doctype="GST Return Log")
 def download_reconcile_as_excel(company_gstin: str, month_or_quarter: str, year: str):
     frappe.has_permission("GSTR-1 Beta", "export", throw=True)
 
@@ -2221,6 +2228,7 @@ def download_reconcile_as_excel(company_gstin: str, month_or_quarter: str, year:
 
 
 @frappe.whitelist()
+@validate_gstin_permission(doctype="GST Return Log")
 def get_gstr_1_json(
     company_gstin: str,
     year: str,
