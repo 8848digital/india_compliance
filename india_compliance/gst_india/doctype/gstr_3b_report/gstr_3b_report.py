@@ -213,7 +213,13 @@ class GSTR3BReport(Document):
             raise e
 
         finally:
-            frappe.publish_realtime("gstr3b_report_generation", doctype=self.doctype, docname=self.name)
+            # after_commit so the client never reloads before the row is visible
+            frappe.publish_realtime(
+                "gstr3b_report_generation",
+                doctype=self.doctype,
+                docname=self.name,
+                after_commit=True,
+            )
 
     def _get_gstr1_filters(self):
         """Filters for GSTR1Invoices (Sales Invoice data)."""
