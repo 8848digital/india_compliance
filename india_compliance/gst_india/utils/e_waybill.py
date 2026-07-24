@@ -1274,19 +1274,46 @@ class EWaybillData(GSTTransactionData):
         self.set_party_address_details()
         self.validate_distance_for_same_pincode()
 
-        return self.sanitize_data(
-            {
-                "Irn": self.doc.irn,
-                "Distance": self.transaction_details.distance,
-                "TransMode": str(self.transaction_details.mode_of_transport),
-                "TransId": self.transaction_details.gst_transporter_id,
-                "TransName": self.transaction_details.transporter_name,
-                "TransDocDt": self.transaction_details.lr_date,
-                "TransDocNo": self.transaction_details.lr_no,
-                "VehNo": self.transaction_details.vehicle_no,
-                "VehType": self.transaction_details.vehicle_type,
+        data = {
+            "Irn": self.doc.irn,
+            "Distance": self.transaction_details.distance,
+            "TransMode": str(self.transaction_details.mode_of_transport),
+            "TransId": self.transaction_details.gst_transporter_id,
+            "TransName": self.transaction_details.transporter_name,
+            "TransDocDt": self.transaction_details.lr_date,
+            "TransDocNo": self.transaction_details.lr_no,
+            "VehNo": self.transaction_details.vehicle_no,
+            "VehType": self.transaction_details.vehicle_type,
+        }
+        if (
+            is_e_waybill_changes_applicable(self.settings)
+            and self.transaction_details.transaction_type in SHIP_TO_TRANSACTION_TYPES
+        ):
+            if self.sandbox_mode and self.ship_to.gstin and self.ship_to.gstin != "URP":
+                self.ship_to.update({"gstin": "02AMBPG7773M002", "state_number": "02", "pincode": 171302})
+
+            # case of ship_to details provided during irn generation and same as before
+            # passing them again will result in error from e-waybill api
+            if self.irn_has_ship_to_details() == self.ship_to.gstin:
+                return self.sanitize_data(data)
+
+            data["ExpShipDtls"] = {
+                "Gstin": self.ship_to.gstin,
+                "TrdNm": self.ship_to.legal_name,
+                "Addr1": self.ship_to.address_line1,
+                "Addr2": self.ship_to.address_line2,
+                "Loc": self.ship_to.city,
+                "Pin": self.ship_to.pincode,
+                "Stcd": str(self.ship_to.state_number),
             }
-        )
+
+        return self.sanitize_data(data)
+
+    def irn_has_ship_to_details(self):
+        invoice_data = frappe.db.get_value("e-Invoice Log", self.doc.irn, "invoice_data")
+        if not invoice_data:
+            return ""
+        return (json.loads(invoice_data).get("ShipDtls") or {}).get("Gstin", "")
 
     def get_data_for_cancellation(self, values):
         self.validate_if_e_waybill_is_set()
@@ -1815,10 +1842,12 @@ class EWaybillData(GSTTransactionData):
             self.bill_from.gstin = _get_sandbox_gstin(self.bill_from, 0)
             self.bill_to.gstin = _get_sandbox_gstin(self.bill_to, 1)
             if self.ship_to.gstin:
-                self.ship_to.gstin = _get_sandbox_gstin(self.ship_to, 1)
+                # ship to gstin can't be the same as bill to gstin
+                self.ship_to.gstin = _get_sandbox_gstin(self.ship_to, 0)
 
-        # For regular outward supplies, use Place of Supply.
-        if self.doc.get("is_return") or self.doc.gst_category == "SEZ":
+            # TODO: in future add ship_to gstin in sandbox as SHIPPING_GSTIN = "07AAFCD5862R1ZX" and update the failing test cases
+
+        if self.doc.get("is_return") or self.bill_to.gst_category == "SEZ":
             to_state_code = self.bill_to.state_number
         else:
             to_state_code = int(self.transaction_details.pos_state_code)
