@@ -1472,6 +1472,7 @@ E_WAYBILL_DN_FIELDS = [
         "fieldtype": "Data",
         "insert_after": "transporter",
         "fetch_from": "transporter.gst_transporter_id",
+        "fetch_if_empty": 1,  # preserve a manually entered value on resave
         "print_hide": 1,
         "no_copy": 1,
         "translatable": 0,
@@ -1713,6 +1714,7 @@ E_WAYBILL_SCR_FIELDS = [
         "fieldtype": "Data",
         "insert_after": "transporter_name",
         "fetch_from": "transporter.gst_transporter_id",
+        "fetch_if_empty": 1,  # preserve a manually entered value on resave
         "print_hide": 1,
         "no_copy": 1,
         "translatable": 0,
