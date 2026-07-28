@@ -1,15 +1,23 @@
 // Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and contributors
 // For license information, please see license.txt
 
+const NIL_EXEMPT_E_INVOICE_DESCRIPTIONS = {
+    "Do Not Generate": __(
+        "e-Invoice is not generated for invoices containing only Nil-Rated / Exempted / Non-GST items. For mixed invoices, these items are excluded from the ItemList.",
+    ),
+    "Generate with Other Charges": __(
+        "Nil-Rated / Exempted / Non-GST item values are reported at item-level Other Charges (AssAmt = 0) in e-Invoice.",
+    ),
+    "Generate with Taxable Values": __(
+        "Nil-Rated / Exempted / Non-GST item values are reported as taxable in e-Invoice. During GSTR-1 preparation, these invoices will be treated as Zero-Rated B2B and may cause reconciliation mismatches.",
+    ),
+};
+
 frappe.ui.form.on("GST Settings", {
     setup(frm) {
-        [
-            "cgst_account",
-            "sgst_account",
-            "igst_account",
-            "cess_account",
-            "cess_non_advol_account",
-        ].forEach(field => filter_accounts(frm, field));
+        ["cgst_account", "sgst_account", "igst_account", "cess_account", "cess_non_advol_account"].forEach(
+            (field) => filter_accounts(frm, field),
+        );
 
         const company_query = {
             filters: {
@@ -25,7 +33,11 @@ frappe.ui.form.on("GST Settings", {
         });
     },
     onload: show_ic_api_promo,
-    refresh: show_update_gst_category_button,
+    refresh(frm) {
+        show_update_gst_category_button(frm);
+        set_state_options_for_e_waybill_threshold(frm);
+        update_nil_exempt_e_invoice_description(frm);
+    },
     attach_e_waybill_print(frm) {
         if (!frm.doc.attach_e_waybill_print || frm.doc.fetch_e_waybill_data) return;
         frm.set_value("fetch_e_waybill_data", 1);
@@ -35,12 +47,19 @@ frappe.ui.form.on("GST Settings", {
     generate_e_waybill_with_e_invoice: set_auto_generate_e_waybill,
     auto_cancel_e_invoice: auto_cancel_e_invoice,
     reason_for_e_invoice_cancellation: reason_for_e_invoice_cancellation,
+    nil_exempt_e_invoice_treatment: update_nil_exempt_e_invoice_description,
     after_save(frm) {
         // sets latest values in frappe.boot for current user
         // other users will still need to refresh page
         Object.assign(gst_settings, frm.doc);
     },
 });
+
+function update_nil_exempt_e_invoice_description(frm) {
+    const description = NIL_EXEMPT_E_INVOICE_DESCRIPTIONS[frm.doc.nil_exempt_e_invoice_treatment] || "";
+    frm.set_df_property("nil_exempt_e_invoice_treatment", "description", description);
+    frm.refresh_field("nil_exempt_e_invoice_treatment");
+}
 
 function filter_accounts(frm, account_field) {
     frm.set_query(account_field, "gst_accounts", (_, cdt, cdn) => {
@@ -59,20 +78,16 @@ function show_ic_api_promo(frm) {
     if (!frm.doc.__onload?.can_show_promo) return;
     const alert_message = `
     Looking for API Features?
-    <a href="/app/india-compliance-account" class="alert-link">
+    <a href="${frappe.utils.generate_route({
+        type: "Page",
+        name: "india-compliance-account",
+    })}" class="alert-link">
         Get started with the India Compliance API!
     </a>`;
 
-    india_compliance.show_dismissable_alert(
-        frm.layout.wrapper,
-        alert_message,
-        "primary",
-        () => {
-            frappe.xcall(
-                "india_compliance.gst_india.doctype.gst_settings.gst_settings.disable_api_promo"
-            );
-        }
-    );
+    india_compliance.show_dismissable_alert(frm.layout.wrapper, alert_message, "primary", () => {
+        frappe.xcall("india_compliance.gst_india.doctype.gst_settings.gst_settings.disable_api_promo");
+    });
 }
 
 function show_update_gst_category_button(frm) {
@@ -88,7 +103,7 @@ function show_update_gst_category_button(frm) {
         frappe.msgprint({
             title: __("Update GST Category"),
             message: __(
-                "Confirm to update GST Category for all Addresses where it is missing using API. It is missing for these <a><span class='custom-link' data-fieldtype='Link' data-doctype='Address'>Addresses</span><a>."
+                "Confirm to update GST Category for all Addresses where it is missing using API. It is missing for these <a><span class='custom-link' data-fieldtype='Link' data-doctype='Address'>Addresses</span><a>.",
             ),
             primary_action: {
                 label: __("Update"),
@@ -115,16 +130,21 @@ function set_auto_generate_e_waybill(frm) {
 
     frm.set_value(
         "auto_generate_e_waybill",
-        frm.doc.auto_generate_e_invoice && frm.doc.generate_e_waybill_with_e_invoice
+        frm.doc.auto_generate_e_invoice && frm.doc.generate_e_waybill_with_e_invoice,
     );
 
-    frm.set_value("auto_cancel_e_waybill", frm.doc.auto_cancel_e_invoice)
+    frm.set_value("auto_cancel_e_waybill", frm.doc.auto_cancel_e_invoice);
 }
 
-function auto_cancel_e_invoice(frm){
-    frm.set_value("auto_cancel_e_waybill", frm.doc.auto_cancel_e_invoice)
+function auto_cancel_e_invoice(frm) {
+    frm.set_value("auto_cancel_e_waybill", frm.doc.auto_cancel_e_invoice);
 }
 
-function reason_for_e_invoice_cancellation(frm){
-    frm.set_value("reason_for_e_waybill_cancellation", frm.doc.reason_for_e_invoice_cancellation)
+function reason_for_e_invoice_cancellation(frm) {
+    frm.set_value("reason_for_e_waybill_cancellation", frm.doc.reason_for_e_invoice_cancellation);
+}
+
+function set_state_options_for_e_waybill_threshold(frm) {
+    frm.fields_dict.e_waybill_threshold_for_intrastate.grid.fields_map.state.options =
+        frappe.boot.india_state_options;
 }

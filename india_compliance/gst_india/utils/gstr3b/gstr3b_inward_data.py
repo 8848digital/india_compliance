@@ -3,12 +3,74 @@ from frappe.query_builder import Case
 from frappe.query_builder.custom import ConstantColumn
 from frappe.query_builder.functions import IfNull, Sum
 
-from india_compliance.gst_india.constants import GST_TAX_TYPES
+from india_compliance.gst_india.constants import GST_TAX_TYPES, SERVICE_HSN_PREFIX
 from india_compliance.gst_india.overrides.transaction import is_inter_state_supply
 from india_compliance.gst_india.utils import get_full_gst_uom
 from india_compliance.gst_india.utils.gstr_1 import GSTR1_SubCategory
+from india_compliance.gst_india.utils.itc_claim import (
+    apply_period_filter as _apply_itc_period_filter,
+)
 
+<<<<<<< HEAD
+=======
+PURCHASE_INVOICE_DOCTYPES = ("Purchase Invoice", "Bill of Entry", "Journal Entry")
 
+ITC_AMOUNT_KEYS = {
+    "iamt": "igst_amount",
+    "camt": "cgst_amount",
+    "samt": "sgst_amount",
+    "csamt": "cess_amount",
+}
+
+INWARD_ITC_SECTION_MAP = {
+    "Import Of Goods": ("itc_avl", "IMPG", 1),
+    "Import Of Service": ("itc_avl", "IMPS", 1),
+    "ITC on Reverse Charge": ("itc_avl", "ISRC", 1),
+    "Input Service Distributor": ("itc_avl", "ISD", 1),
+    "All Other ITC": ("itc_avl", "OTH", 1),
+    "As per rules 42 & 43 of CGST Rules and section 17(5)": ("itc_rev", "RUL", -1),
+    "Others": ("itc_rev", "OTH", -1),
+    "Reclaim of ITC Reversal": ("itc_inelg", "RUL", 0),
+    "ITC restricted due to PoS rules": ("itc_inelg", "OTH", 0),
+}
+
+INWARD_NIL_EXEMPT_SECTION_MAP = {
+    "Composition Scheme, Exempted, Nil Rated": "GST",
+    "Non-GST": "NONGST",
+}
+
+INWARD_SECTION_SUB_CATEGORY_MAP = {
+    "4": {
+        "ITC Available": [
+            "Import Of Goods",
+            "Import Of Service",
+            "ITC on Reverse Charge",
+            "Input Service Distributor",
+            "All Other ITC",
+        ],
+        "ITC Reversed": [
+            "As per rules 42 & 43 of CGST Rules and section 17(5)",
+            "Others",
+        ],
+        "Ineligible ITC": [
+            "Reclaim of ITC Reversal",
+            "ITC restricted due to PoS rules",
+        ],
+    },
+    "5": {
+        "Composition Scheme, Exempted, Nil Rated": [
+            "Composition Scheme, Exempted, Nil Rated",
+        ],
+        "Non-GST": ["Non-GST"],
+    },
+}
+
+INWARD_SECTION_DOCTYPES = {
+    "4": PURCHASE_INVOICE_DOCTYPES,
+    "5": ("Purchase Invoice",),
+}
+
+>>>>>>> 8064d5dbc (refactor: gstr3b data)
 PURCHASE_CATEGORY_CONDITIONS = {
     "Composition Scheme, Exempted, Nil Rated": {
         "category": "is_composition_nil_rated_or_exempted",
@@ -33,6 +95,13 @@ PURCHASE_CATEGORY_CONDITIONS = {
     },
 }
 
+_pc_keys = list(PURCHASE_CATEGORY_CONDITIONS)
+if _pc_keys.index("ITC Reversed") <= _pc_keys.index("ITC Available"):
+    raise ValueError(
+        "PURCHASE_CATEGORY_CONDITIONS: 'ITC Reversed' must come after 'ITC Available'"
+    )
+del _pc_keys
+
 BOE_CATEGORY_CONDITIONS = {
     "ITC Available": {
         "category": "is_itc_available_for_boe",
@@ -40,14 +109,16 @@ BOE_CATEGORY_CONDITIONS = {
     },
     "ITC Reversed": {
         "category": "is_itc_reversed_for_boe",
-        "sub_category": "set_for_itc_reversed",
+        # Explicit BOE method — does NOT read ineligibility_reason (absent on BOE
+        # rows) and avoids relying on None != "Others" as an implicit sentinel.
+        "sub_category": "set_for_itc_reversed_boe",
     },
 }
 
 JE_CATEGORY_CONDITIONS = {
     "ITC Reversed": {
         "category": "is_itc_reversed_for_je",
-        "sub_category": "set_for_itc_reversed",
+        "sub_category": "set_for_itc_reversed_je",
     },
     "ITC Reclaimed": {
         "category": "is_itc_reclaimed",
@@ -62,6 +133,7 @@ DOCTYPE_CONDITION_MAP = {
 }
 
 AMOUNT_FIELDS = (
+    "taxable_value",
     "igst_amount",
     "cgst_amount",
     "sgst_amount",
@@ -70,20 +142,42 @@ AMOUNT_FIELDS = (
     "total_amount",
 )
 
+# Maps GSTR-3B sub-category labels to the 'ty' key in the JSON template (ITC Available)
+ITC_AVAILABLE_SUB_CATEGORY_MAP = {
+    "Import Of Goods": "IMPG",
+    "Import Of Service": "IMPS",
+    "ITC on Reverse Charge": "ISRC",
+    "Input Service Distributor": "ISD",
+    "All Other ITC": "OTH",
+}
+
+# Maps GSTR-3B sub-category labels to the index in itc_rev list (ITC Reversed)
+ITC_REVERSED_INDEX_MAP = {
+    "As per rules 42 & 43 of CGST Rules and section 17(5)": 0,  # ty = "RUL"
+    "Others": 1,
+}
+
 
 class GSTR3BCategoryConditions:
     def is_composition_nil_rated_or_exempted(self, invoice):
-        return invoice.gst_category != "Overseas" and (
+        return (
             invoice.gst_treatment == "Nil-Rated"
             or invoice.gst_treatment == "Exempted"
             or invoice.gst_category == "Registered Composition"
         )
 
     def is_non_gst(self, invoice):
-        return invoice.gst_category != "Overseas" and invoice.gst_treatment == "Non-GST"
+        return invoice.gst_treatment == "Non-GST"
 
     def is_itc_available(self, invoice):
-        return invoice.ineligibility_reason != "ITC restricted due to PoS rules"
+        # A blank gst_treatment means the item was never configured; do NOT
+        # let it fall silently into ITC Available (table 4A).  The caller in
+        # get_processed_invoices will instead track it as an unmatched voucher
+        # so it surfaces in the missing-field invoice list.
+        return (
+            bool(invoice.gst_treatment)
+            and invoice.ineligibility_reason != "ITC restricted due to PoS rules"
+        )
 
     def is_itc_reversed(self, invoice):
         return invoice.ineligibility_reason == "Ineligible As Per Section 17(5)"
@@ -112,11 +206,16 @@ class GSTR3BSubcategory(GSTR3BCategoryConditions):
         invoice.invoice_sub_category = "Non-GST"
 
     def set_for_itc_available(self, invoice):
-        invoice.invoice_sub_category = invoice.itc_classification
+        # itc_classification can be None on older / migrated documents;
+        # fall back to 'All Other ITC' so the amount is never silently
+        # dropped from table 4A.
+        invoice.invoice_sub_category = invoice.itc_classification or "All Other ITC"
 
     def set_for_itc_reversed(self, invoice):
         invoice.invoice_sub_category = (
-            "As per rules 42 & 43 of CGST Rules and section 17(5)"
+            "Others"
+            if invoice.ineligibility_reason == "Others"
+            else ("As per rules 42 & 43 of CGST Rules and section 17(5)")
         )
 
     def set_for_ineligible_itc(self, invoice):
@@ -124,6 +223,23 @@ class GSTR3BSubcategory(GSTR3BCategoryConditions):
 
     def set_for_itc_available_boe(self, invoice):
         invoice.invoice_sub_category = "Import Of Goods"
+
+    def set_for_itc_reversed_je(self, invoice):
+        """
+        Restore the pre-rewrite default for Journal Entry reversals:
+        - "As per rules 42 & 43 of CGST Rules" → RUL (index 0)
+        - blank or any other value               → OTH (index 1)
+
+        The shared set_for_itc_reversed inverts this default (anything that is
+        not "Others" becomes RUL), so a JE with a blank ineligibility_reason
+        would silently move from the OTH row to the RUL row, potentially
+        causing a discrepancy with previously filed returns.
+        """
+        invoice.invoice_sub_category = (
+            "As per rules 42 & 43 of CGST Rules and section 17(5)"
+            if invoice.ineligibility_reason == "As per rules 42 & 43 of CGST Rules"
+            else "Others"
+        )
 
     def set_for_itc_reclaimed(self, invoice):
         invoice.invoice_sub_category = "Reclaim of ITC Reversal"
@@ -139,6 +255,15 @@ class GSTR3BQuery:
         self.JE_ACCOUNT = frappe.qb.DocType("Journal Entry Account")
         self.filters = frappe._dict(filters or {})
 
+    def apply_itc_period_filter(self, query, doc):
+        return _apply_itc_period_filter(
+            query,
+            doc,
+            self.filters.get("from_date"),
+            self.filters.get("to_date"),
+            filter_by=self.filters.get("filter_by"),
+        )
+
     def get_base_purchase_query(self):
         query = (
             frappe.qb.from_(self.PI)
@@ -153,24 +278,20 @@ class GSTR3BQuery:
                 IfNull(self.PI.place_of_supply, "").as_("place_of_supply"),
                 IfNull(self.PI.gst_category, "").as_("gst_category"),
                 self.PI.company_gstin,
+                self.PI.is_reverse_charge,
                 IfNull(self.PI.supplier_gstin, "").as_("supplier_gstin"),
+                IfNull(self.PI.supplier_address, "").as_("supplier_address"),
                 self.PI_ITEM.item_code,
                 IfNull(self.PI_ITEM.gst_treatment, "").as_("gst_treatment"),
                 self.PI_ITEM.gst_hsn_code,
                 self.PI_ITEM.uom,
                 self.PI_ITEM.qty,
-                (
-                    self.PI_ITEM.cgst_rate
-                    + self.PI_ITEM.sgst_rate
-                    + self.PI_ITEM.igst_rate
-                ).as_("gst_rate"),
+                (self.PI_ITEM.cgst_rate + self.PI_ITEM.sgst_rate + self.PI_ITEM.igst_rate).as_("gst_rate"),
                 self.PI_ITEM.taxable_value,
                 self.PI_ITEM.cgst_amount,
                 self.PI_ITEM.sgst_amount,
                 self.PI_ITEM.igst_amount,
-                (self.PI_ITEM.cess_amount + self.PI_ITEM.cess_non_advol_amount).as_(
-                    "cess_amount"
-                ),
+                (self.PI_ITEM.cess_amount + self.PI_ITEM.cess_non_advol_amount).as_("cess_amount"),
                 (
                     self.PI_ITEM.cgst_amount
                     + self.PI_ITEM.sgst_amount
@@ -187,9 +308,9 @@ class GSTR3BQuery:
                     + self.PI_ITEM.cess_non_advol_amount
                 ).as_("total_amount"),
             )
-            .where((self.PI.is_opening == "No"))
+            .where(self.PI.is_opening == "No")
             .where(self.PI.company_gstin != IfNull(self.PI.supplier_gstin, ""))
-            .where(IfNull(self.PI.itc_classification, "") != "Import Of Goods")
+            .where(self.PI.is_boe_applicable == 0)
         )
 
         return self.get_query_with_common_filters(query, self.PI)
@@ -203,23 +324,18 @@ class GSTR3BQuery:
                 ConstantColumn("Bill of Entry").as_("voucher_type"),
                 self.BOE.name.as_("voucher_no"),
                 self.BOE.posting_date,
+                ConstantColumn("Import Of Goods").as_("itc_classification"),
                 self.BOE_ITEM.is_ineligible_for_itc,
                 self.BOE_ITEM.item_code,
                 self.BOE_ITEM.gst_hsn_code,
                 self.BOE_ITEM.uom,
                 self.BOE_ITEM.qty,
-                (
-                    self.BOE_ITEM.cgst_rate
-                    + self.BOE_ITEM.sgst_rate
-                    + self.BOE_ITEM.igst_rate
-                ).as_("gst_rate"),
+                (self.BOE_ITEM.cgst_rate + self.BOE_ITEM.sgst_rate + self.BOE_ITEM.igst_rate).as_("gst_rate"),
                 self.BOE_ITEM.taxable_value,
                 self.BOE_ITEM.cgst_amount,
                 self.BOE_ITEM.sgst_amount,
                 self.BOE_ITEM.igst_amount,
-                (self.BOE_ITEM.cess_amount + self.BOE_ITEM.cess_non_advol_amount).as_(
-                    "cess_amount"
-                ),
+                (self.BOE_ITEM.cess_amount + self.BOE_ITEM.cess_non_advol_amount).as_("cess_amount"),
                 (
                     self.BOE_ITEM.cgst_amount
                     + self.BOE_ITEM.sgst_amount
@@ -259,6 +375,7 @@ class GSTR3BQuery:
                 self.JE.voucher_type.as_("ineligibility_type"),
                 self.JE.name.as_("voucher_no"),
                 self.JE.posting_date,
+                IfNull(self.JE.ineligibility_reason, "").as_("ineligibility_reason"),
                 *[
                     Sum(
                         Case()
@@ -266,7 +383,7 @@ class GSTR3BQuery:
                             self.JE_ACCOUNT.gst_tax_type.isin(fields),
                             Case()
                             .when(
-                                self.JE.voucher_type == "Reversal of ITC",
+                                self.JE.voucher_type == "Reversal Of ITC",
                                 self.JE_ACCOUNT.credit_in_account_currency
                                 - self.JE_ACCOUNT.debit_in_account_currency,
                             )
@@ -281,22 +398,19 @@ class GSTR3BQuery:
                 ],
             )
             .where(self.JE.is_opening == "No")
-            .where(
-                self.JE.voucher_type.isin(
-                    ["Reclaim of ITC Reversal", "Reversal of ITC"]
-                )
-            )
+            .where(self.JE.voucher_type.isin(["Reclaim of ITC Reversal", "Reversal Of ITC"]))
             .groupby(self.JE.name)
         )
 
         return self.get_query_with_common_filters(query, self.JE)
 
     def get_query_with_common_filters(self, query, doc):
-        query = query.where(
-            (doc.docstatus == 1)
-            & (doc.posting_date[self.filters.from_date : self.filters.to_date])
-            & (doc.company == self.filters.company)
-        )
+        """
+        Apply common filters to the query.
+        """
+        query = query.where((doc.docstatus == 1) & (doc.company == self.filters.company))
+
+        query = self.apply_itc_period_filter(query, doc)
 
         if self.filters.company_gstin:
             query = query.where(doc.company_gstin == self.filters.company_gstin)
@@ -304,7 +418,46 @@ class GSTR3BQuery:
         return query
 
 
+<<<<<<< HEAD
 class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
+=======
+class GSTR3BInwardInvoices(GSTR3BInwardQuery, GSTR3BSubcategory):
+    def __init__(self, filters):
+        super().__init__(filters)
+        self.gst_settings = frappe.get_cached_doc("GST Settings")
+
+    def get_all_data(self, group_by_invoice=False):
+        """Return all inward invoices across all supported doctypes."""
+        invoices = []
+        for doctype in PURCHASE_INVOICE_DOCTYPES:
+            invoices.extend(self.get_data(doctype))
+
+        if not group_by_invoice:
+            return invoices
+
+        return self.get_invoice_wise_data(invoices)
+
+    def get_section_data(self, sub_section, group_by_invoice=False, invoice_sub_categories=None):
+        invoices = []
+
+        for doctype in INWARD_SECTION_DOCTYPES.get(str(sub_section), ()):
+            invoices.extend(self.get_data(doctype))
+
+        if group_by_invoice:
+            invoices = self.get_invoice_wise_data(invoices)
+
+        return self.get_filtered_invoices(
+            invoices,
+            invoice_sub_categories or self.get_section_sub_categories(sub_section),
+        )
+
+    @classmethod
+    def get_section_sub_categories(cls, sub_section):
+        section = INWARD_SECTION_SUB_CATEGORY_MAP.get(str(sub_section), {})
+
+        return [category for sub_categories in section.values() for category in sub_categories]
+
+>>>>>>> 8064d5dbc (refactor: gstr3b data)
     def get_data(self, doctype, group_by_invoice=False):
         if doctype == "Purchase Invoice":
             query = self.get_base_purchase_query()
@@ -327,12 +480,23 @@ class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
         processed_invoices = []
         identified_uom = {}
 
+        if not hasattr(self, "_unmatched_vouchers"):
+            self._unmatched_vouchers = set()
+
         for invoice in data:
             if not invoice.invoice_sub_category:
                 self.set_invoice_category(invoice, conditions)
+                if not invoice.invoice_category:
+                    # No condition matched — the item carries invalid or missing
+                    # data (e.g. blank gst_treatment on a PI item).  Track the
+                    # voucher so the report surfaces it in the missing-field list
+                    # and do NOT include it in the report data.
+                    self._unmatched_vouchers.add(invoice.voucher_no)
+                    continue
                 self.set_invoice_sub_category(invoice, conditions)
 
             invoice.hsn_sub_category = GSTR1_SubCategory.HSN.value
+
             if invoice.invoice_category in (
                 "Composition Scheme, Exempted, Nil Rated",
                 "Non-GST",
@@ -345,7 +509,8 @@ class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
             if invoice.invoice_category != "ITC Available":
                 continue
 
-            if getattr(self, conditions["ITC Reversed"]["category"], None)(invoice):
+            itc_rev_cond = conditions.get("ITC Reversed", {}).get("category")
+            if itc_rev_cond and getattr(self, itc_rev_cond)(invoice):
                 reversed_invoice = frappe._dict(
                     {
                         **invoice,
@@ -374,7 +539,7 @@ class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
         )
 
     def process_uom(self, invoice, identified_uom):
-        if invoice.gst_hsn_code and invoice.gst_hsn_code.startswith("99"):
+        if invoice.gst_hsn_code and invoice.gst_hsn_code.startswith(SERVICE_HSN_PREFIX):
             invoice["uom"] = "OTH-OTHERS"
             return
 
@@ -388,14 +553,20 @@ class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
 
     def set_invoice_category(self, invoice, conditions):
         for category, functions in conditions.items():
-            if getattr(self, functions["category"], None)(invoice):
+            if getattr(self, functions["category"])(invoice):
                 invoice.invoice_category = category
                 return
 
     def set_invoice_sub_category(self, invoice, conditions):
         category = invoice.invoice_category
+        if not category or category not in conditions:
+            # No condition matched in set_invoice_category (e.g. blank
+            # gst_treatment on a PI item).  The caller in get_processed_invoices
+            # will skip this invoice; guard here as defence-in-depth to prevent
+            # a KeyError from conditions[None].
+            return
         function = conditions[category]["sub_category"]
-        getattr(self, function, None)(invoice)
+        getattr(self, function)(invoice)
 
     def get_invoice_wise_data(self, invoices):
         invoice_wise_data = {}
@@ -403,10 +574,18 @@ class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
             key = f"{invoice.voucher_no}-{invoice.invoice_category}-{invoice.invoice_sub_category}"
 
             if key not in invoice_wise_data:
-                invoice_wise_data[key] = invoice
+                # Store a shallow copy so that accumulation below never
+                # mutates the original objects in the caller's list (e.g.
+                # pi_items is reused by process_inward_nil_exempt after this
+                # method runs).
+                invoice_wise_data[key] = frappe._dict(invoice)
             else:
                 for field in AMOUNT_FIELDS:
-                    invoice_wise_data[key][field] += invoice[field]
+                    # Use .get() on both sides: Journal Entry rows do not
+                    # carry taxable_value, so a plain [] access raises KeyError.
+                    invoice_wise_data[key][field] = invoice_wise_data[key].get(
+                        field, 0
+                    ) + invoice.get(field, 0)
 
         return list(invoice_wise_data.values())
 
@@ -414,8 +593,4 @@ class GSTR3BInvoices(GSTR3BQuery, GSTR3BSubcategory):
         if not subcategories:
             return invoices
 
-        return [
-            invoice
-            for invoice in invoices
-            if invoice.invoice_sub_category in subcategories
-        ]
+        return [invoice for invoice in invoices if invoice.invoice_sub_category in subcategories]

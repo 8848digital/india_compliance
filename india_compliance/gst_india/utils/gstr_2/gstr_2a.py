@@ -3,13 +3,15 @@ from datetime import datetime
 import frappe
 
 from india_compliance.gst_india.utils import get_datetime, parse_datetime
-from india_compliance.gst_india.utils.gstr_2.gstr import GSTR, get_mapped_value
+from india_compliance.gst_india.utils.gstr_2.gstr import (
+    GSTR,
+    get_mapped_value,
+    get_unique_key,
+)
 
 
 def map_date_format(date_str, source_format, target_format):
-    return date_str and datetime.strptime(date_str, source_format).strftime(
-        target_format
-    )
+    return date_str and datetime.strptime(date_str, source_format).strftime(target_format)
 
 
 class GSTR2a(GSTR):
@@ -28,12 +30,7 @@ class GSTR2a(GSTR):
             .where(gst_is.gstr_1_filled == 0)
         ).run(as_dict=True)
 
-        return {
-            f"{transaction.get('supplier_gstin', '')}-{transaction.get('bill_no', '')}": transaction.get(
-                "name"
-            )
-            for transaction in existing_transactions
-        }
+        return {get_unique_key(transaction): transaction.get("name") for transaction in existing_transactions}
 
     def handle_missing_transactions(self):
         """
@@ -44,16 +41,12 @@ class GSTR2a(GSTR):
 
         if self.existing_transaction:
             for inward_supply_name in self.existing_transaction.values():
-                frappe.delete_doc(
-                    "GST Inward Supply", inward_supply_name, ignore_permissions=True
-                )
+                frappe.delete_doc("GST Inward Supply", inward_supply_name, ignore_permissions=True)
 
     def get_supplier_details(self, supplier):
         supplier_details = {
             "supplier_gstin": supplier.ctin,
-            "gstr_3b_filled": get_mapped_value(
-                supplier.cfs3b, self.VALUE_MAPS.Y_N_to_check
-            ),
+            "gstr_3b_filled": get_mapped_value(supplier.cfs3b, self.VALUE_MAPS.Y_N_to_check),
             "gstr_1_filing_date": parse_datetime(supplier.fldtr1),
             "registration_cancel_date": parse_datetime(supplier.dtcancel),
             "sup_return_period": map_date_format(supplier.flprdr1, "%b-%y", "%m%Y"),
@@ -77,9 +70,7 @@ class GSTR2a(GSTR):
     # item details are in item_det for GSTR2a
     def get_transaction_items(self, invoice):
         return [
-            self.get_transaction_item(
-                frappe._dict(item.get("itm_det", {})), item.get("num", 0)
-            )
+            self.get_transaction_item(frappe._dict(item.get("itm_det", {})), item.get("num", 0))
             for item in invoice.get(self.get_key("items_key"))
         ]
 
@@ -134,22 +125,14 @@ class GSTR2aB2B(GSTR2a):
     def get_invoice_details(self, invoice):
         return {
             "bill_no": invoice.inum,
-            "supply_type": get_mapped_value(
-                invoice.inv_typ, self.VALUE_MAPS.gst_category
-            ),
+            "supply_type": get_mapped_value(invoice.inv_typ, self.VALUE_MAPS.gst_category),
             "bill_date": parse_datetime(invoice.idt, day_first=True),
             "document_value": invoice.val,
             "place_of_supply": get_mapped_value(invoice.pos, self.VALUE_MAPS.states),
             "other_return_period": map_date_format(invoice.aspd, "%b-%y", "%m%Y"),
-            "amendment_type": get_mapped_value(
-                invoice.atyp, self.VALUE_MAPS.amend_type
-            ),
-            "is_reverse_charge": get_mapped_value(
-                invoice.rchrg, self.VALUE_MAPS.Y_N_to_check
-            ),
-            "diffprcnt": get_mapped_value(
-                invoice.diff_percent, {1: 1, 0.65: 0.65, None: 1}
-            ),
+            "amendment_type": get_mapped_value(invoice.atyp, self.VALUE_MAPS.amend_type),
+            "is_reverse_charge": get_mapped_value(invoice.rchrg, self.VALUE_MAPS.Y_N_to_check),
+            "diffprcnt": get_mapped_value(invoice.diff_percent, {1: 1, 0.65: 0.65, None: 1}),
             "irn_source": invoice.srctyp,
             "irn_number": invoice.irn,
             "irn_gen_date": parse_datetime(invoice.irngendate, day_first=True),
@@ -193,9 +176,7 @@ class GSTR2aCDNRA(GSTR2aCDNR):
             {
                 "original_bill_no": invoice.ont_num,
                 "original_bill_date": parse_datetime(invoice.ont_dt, day_first=True),
-                "original_doc_type": get_mapped_value(
-                    invoice.ntty, self.VALUE_MAPS.note_type
-                ),
+                "original_doc_type": get_mapped_value(invoice.ntty, self.VALUE_MAPS.note_type),
             }
         )
         return invoice_details
@@ -208,19 +189,13 @@ class GSTR2aISD(GSTR2a):
 
     def get_invoice_details(self, invoice):
         return {
-            "doc_type": get_mapped_value(
-                invoice.isd_docty, self.VALUE_MAPS.isd_type_2a
-            ),
+            "doc_type": get_mapped_value(invoice.isd_docty, self.VALUE_MAPS.isd_type_2a),
             "bill_no": invoice.docnum,
             "bill_date": parse_datetime(invoice.docdt, day_first=True),
-            "itc_availability": get_mapped_value(
-                invoice.itc_elg, self.VALUE_MAPS.yes_no
-            ),
+            "itc_availability": get_mapped_value(invoice.itc_elg, self.VALUE_MAPS.yes_no),
             "other_return_period": map_date_format(invoice.aspd, "%b-%y", "%m%Y"),
             "is_amended": 1 if invoice.atyp else 0,
-            "amendment_type": get_mapped_value(
-                invoice.atyp, self.VALUE_MAPS.amend_type
-            ),
+            "amendment_type": get_mapped_value(invoice.atyp, self.VALUE_MAPS.amend_type),
             "igst": invoice.iamt,
             "cgst": invoice.camt,
             "sgst": invoice.samt,

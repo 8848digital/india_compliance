@@ -2,11 +2,10 @@ import json
 from base64 import b64decode, b64encode
 from functools import wraps
 
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-
 import frappe
 import frappe.utils
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
 from frappe import _
 from frappe.utils import add_to_date, cint, now_datetime
 
@@ -56,7 +55,7 @@ class StaticResourcesAPI(BaseAPI):
         self.settings.db_set("gstn_public_certificate", response.message)
 
         return response.message
-    
+
     def get_nic_public_key(self, error_message=None) -> str:
         response = self.get(endpoint="nic_public_key")
 
@@ -91,9 +90,7 @@ class FilesAPI(BaseAPI):
         computed_hash = hash_sha256(response)
         if computed_hash != self.hash:
             frappe.throw(
-                _(
-                    "Hash of file doesn't match for {0}. File may be corrupted or tampered."
-                ).format(self.ul)
+                _("Hash of file doesn't match for {0}. File may be corrupted or tampered.").format(self.ul)
             )
 
         encrypted_data = tar_gz_bytes_to_data(response)
@@ -108,6 +105,8 @@ class FilesAPI(BaseAPI):
 
 
 class TaxpayerAuthenticate(BaseAPI):
+    API_NAME = "GST Returns"
+
     SENSITIVE_INFO = BaseAPI.SENSITIVE_INFO + (
         "auth-token",
         "auth_token",
@@ -223,9 +222,7 @@ class TaxpayerAuthenticate(BaseAPI):
             values["auth_token"] = response.auth_token
 
         if response.get("expiry"):
-            session_expiry = add_to_date(
-                None, minutes=cint(response.expiry), as_datetime=True
-            )
+            session_expiry = add_to_date(None, minutes=cint(response.expiry), as_datetime=True)
             self.session_expiry = session_expiry
             values["session_expiry"] = session_expiry
 
@@ -258,9 +255,7 @@ class TaxpayerAuthenticate(BaseAPI):
             json["app_key"] = (
                 aes_encrypt_data(self.app_key, self.session_key)
                 if json.get("action") == "REFRESHTOKEN"
-                else encrypt_using_public_key(
-                    self.app_key, self.get_public_certificate()
-                )
+                else encrypt_using_public_key(self.app_key, self.get_public_certificate())
             )
 
         if json.get("otp"):
@@ -345,7 +340,6 @@ class TaxpayerBaseAPI(TaxpayerAuthenticate):
                 "gstin": self.company_gstin,
                 "state-cd": self.company_gstin[:2],
                 "username": self.username,
-                "ip-usr": frappe.cache.hget("public_ip", "public_ip", get_public_ip),
                 "txn": self.generate_request_id(length=32),
                 "ip-usr": self.session_ip,
             }
@@ -393,7 +387,7 @@ class TaxpayerBaseAPI(TaxpayerAuthenticate):
         params = {"gstin": self.company_gstin, **(kwargs.pop("params", {}))}
         return self._request("get", *args, **kwargs, params=params)
 
-    def post(self, *args, **kwargs):   
+    def post(self, *args, **kwargs):
         self.default_log_values.update(update_gstr_action=True)
         return self._request("post", *args, **kwargs)
 
@@ -461,9 +455,7 @@ class TaxpayerBaseAPI(TaxpayerAuthenticate):
         # Handle invalid public key
         if response.error_type == "invalid_public_key":
             StaticResourcesAPI().get_gstn_public_certificate(
-                error_message=_(
-                    "Looks like Public Key of GSTN used for encryption is Invalid"
-                )
+                error_message=_("Looks like Public Key of GSTN used for encryption is Invalid")
             )
 
     def is_ignored_error(self, response):
@@ -480,10 +472,9 @@ class TaxpayerBaseAPI(TaxpayerAuthenticate):
                 raise InvalidOTPError(response=response)
 
             return True
-        
+
         return False
 
-    
     def get_files(self, return_period, token, action, endpoint):
         response = self.get(
             action=action,
@@ -519,9 +510,7 @@ class TaxpayerBaseAPI(TaxpayerAuthenticate):
         return
 
     def fetch_filing_preference(self, fy):
-        return self.get(
-            action="GETPREF", params={"fy": fy}, endpoint="returns"
-        ).response
+        return self.get(action="GETPREF", params={"fy": fy}, endpoint="returns").response
 
     @staticmethod
     def get_fy():
