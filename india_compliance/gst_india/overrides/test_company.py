@@ -34,6 +34,11 @@ class TestCompanyFixtures(FrappeTestCase):
         # Check for tax category creations.
         self.assertTrue(frappe.db.exists("Tax Category", "Reverse Charge In-State"))
 
+        for row in get_tax_defaults()["tax_categories"]:
+            expected = bool(row.get("is_india_compliance_default"))
+            actual = bool(frappe.db.get_value("Tax Category", row["title"], "is_india_compliance_default"))
+            self.assertEqual(actual, expected)
+
     def test_get_tax_defaults(self):
         gst_rate = 12
         default_taxes = get_tax_defaults(gst_rate)
@@ -43,8 +48,6 @@ class TestCompanyFixtures(FrappeTestCase):
             for tax in template:
                 for row in tax.get("taxes"):
                     expected_rate = (
-                        gst_rate
-                        if "IGST" in row["account_head"]["account_name"]
-                        else gst_rate / 2
+                        gst_rate if "IGST" in row["account_head"]["account_name"] else gst_rate / 2
                     )
                     self.assertEqual(row["account_head"]["tax_rate"], expected_rate)

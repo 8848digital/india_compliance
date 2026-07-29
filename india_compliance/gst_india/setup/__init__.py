@@ -1,10 +1,9 @@
 import click
-
 import frappe
-from frappe.utils import now_datetime, nowdate
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
     make_dimension_in_accounting_doctypes,
 )
+from frappe.utils import now_datetime, nowdate
 
 from india_compliance.gst_india.constants import GST_UOMS
 from india_compliance.gst_india.constants.custom_fields import (
@@ -64,8 +63,10 @@ def create_hrms_custom_fields():
 def create_education_custom_fields():
     _create_custom_fields(EDUCATION_CUSTOM_FIELDS, ignore_validate=True)
 
+
 def create_healthcare_custom_fields():
     _create_custom_fields(HEALTHCARE_CUSTOM_FIELDS, ignore_validate=True)
+
 
 def create_accounting_dimension_fields():
     doctypes = frappe.get_hooks(
@@ -92,9 +93,7 @@ def create_address_template():
     if frappe.db.exists("Address Template", "India"):
         return
 
-    address_html = frappe.read_file(
-        get_data_file_path("address_template.html"), raise_not_found=True
-    )
+    address_html = frappe.read_file(get_data_file_path("address_template.html"), raise_not_found=True)
 
     frappe.get_doc(
         {
@@ -193,9 +192,7 @@ def _create_hsn_codes():
 
 def add_fields_to_item_variant_settings():
     settings = frappe.get_doc("Item Variant Settings")
-    fields_to_add = ITEM_VARIANT_FIELDNAMES - {
-        row.field_name for row in settings.fields
-    }
+    fields_to_add = ITEM_VARIANT_FIELDNAMES - {row.field_name for row in settings.fields}
 
     for fieldname in fields_to_add:
         settings.append("fields", {"field_name": fieldname})
@@ -221,6 +218,7 @@ def set_default_gst_settings():
         "auto_generate_e_invoice": 1,
         "generate_e_waybill_with_e_invoice": 1,
         "e_invoice_applicable_from": nowdate(),
+        "report_nil_exempted_with_taxable_values": 0,
         "fetch_e_invoice_details_from_gst_portal": 1,
         "e_invoice_reporting_time_limit_days": 30,
         "autofill_party_info": 1,
@@ -265,9 +263,7 @@ def set_default_accounts_settings():
 
     show_accounts_settings_override_warning()
 
-    frappe.db.set_single_value(
-        "Accounts Settings", "add_taxes_from_item_tax_template", 0
-    )
+    frappe.db.set_single_value("Accounts Settings", "add_taxes_from_item_tax_template", 0)
 
     frappe.db.set_default("add_taxes_from_item_tax_template", 0)
 
@@ -304,8 +300,7 @@ def show_accounts_settings_override_warning():
     since it defaults to `1`
     """
 
-    address_for_tax_category = frappe.db.get_value(
-        "Accounts Settings",
+    address_for_tax_category = frappe.db.get_single_value(
         "Accounts Settings",
         "determine_address_tax_category_from",
     )

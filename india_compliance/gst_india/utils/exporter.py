@@ -1,11 +1,11 @@
 from io import BytesIO
 
+import frappe
 import openpyxl
+from frappe.desk.utils import provide_binary_file
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
-
-import frappe
 
 
 class ExcelExporter:
@@ -55,14 +55,12 @@ class ExcelExporter:
 
     def export(self, file_name):
         # write out response as a xlsx type
-        if file_name[-4:] != ".xlsx":
-            file_name = f"{file_name}.xlsx"
-
         xlsx_file = self.save_workbook()
-
-        frappe.local.response["filename"] = file_name
-        frappe.local.response["filecontent"] = xlsx_file.getvalue()
-        frappe.local.response["type"] = "binary"
+        provide_binary_file(
+            file_name,
+            "xlsx",
+            xlsx_file.getvalue(),
+        )
 
 
 class Worksheet:
@@ -132,10 +130,11 @@ class Worksheet:
         self.add_data(headers, is_header=True)
         self.add_data(data, is_data=True)
 
-        if add_totals:
+        if data and add_totals:
             self.add_data(self.get_totals(), is_total=True)
 
-        self.apply_conditional_formatting(add_totals)
+        if data:
+            self.apply_conditional_formatting(add_totals)
 
     def insert_data(
         self,

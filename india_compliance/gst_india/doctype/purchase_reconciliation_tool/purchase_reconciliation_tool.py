@@ -1,18 +1,18 @@
 # Copyright (c) 2022, Resilient Tech and contributors
 # For license information, please see license.txt
+
 import re
 from collections import defaultdict
-from typing import List
 
 import frappe
+from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+    get_accounting_dimensions,
+)
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import IfNull
 from frappe.utils import add_to_date, cint, now_datetime
 from frappe.utils.background_jobs import is_job_enqueued
-from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
-    get_accounting_dimensions,
-)
 
 from india_compliance.gst_india.api_classes.taxpayer_base import (
     TaxpayerBaseAPI,
@@ -28,12 +28,10 @@ from india_compliance.gst_india.doctype.purchase_reconciliation_tool import (
 )
 from india_compliance.gst_india.doctype.purchase_reconciliation_tool.purchase_reconciliation_utils import (
     get_formatted_options,
+    set_reconciliation_status,
 )
 from india_compliance.gst_india.doctype.purchase_reconciliation_tool.purchase_reconciliation_utils import (
     link_documents as _link_documents,
-)
-from india_compliance.gst_india.doctype.purchase_reconciliation_tool.purchase_reconciliation_utils import (
-    set_reconciliation_status,
 )
 from india_compliance.gst_india.doctype.purchase_reconciliation_tool.purchase_reconciliation_utils import (
     unlink_documents as _unlink_documents,
@@ -41,10 +39,16 @@ from india_compliance.gst_india.doctype.purchase_reconciliation_tool.purchase_re
 from india_compliance.gst_india.utils import (
     get_gstin_list,
     get_json_from_file,
+    get_party_for_gstin,
     get_timespan_date_range,
     is_api_enabled,
 )
 from india_compliance.gst_india.utils.exporter import ExcelExporter
+from india_compliance.gst_india.utils.gstin_info import (
+    get_fy,
+    get_latest_3b_filed_period,
+    update_gstr_returns_info,
+)
 from india_compliance.gst_india.utils.gstr_2 import (
     GSTR_2A_ACTIONS,
     IMPORT_CATEGORY,
@@ -54,12 +58,23 @@ from india_compliance.gst_india.utils.gstr_2 import (
     save_gstr_2a,
     save_gstr_2b,
 )
+from india_compliance.gst_india.utils.itc_claim import (
+    compare_periods,
+    format_period,
+    period_sort_key,
+    period_to_date,
+)
+from india_compliance.setup_wizard import can_fetch_gstin_info
 
 STATUS_MAP = {
     "Accept": "Reconciled",
     "Pending": "Unreconciled",
     "Ignore": "Ignored",
 }
+
+RECO_2A_CATEGORIES_KEY = "purchase_reco_2a_categories"
+
+VALID_2A_CATEGORIES = {cat.value for cat in GSTR_2A_ACTIONS.values()}
 
 
 class PurchaseReconciliationTool(Document):
@@ -88,9 +103,7 @@ class PurchaseReconciliationTool(Document):
 
         self.set_onload(
             "has_missing_2b_documents",
-            has_missing_2b_documents(
-                date_range, ReturnType.GSTR2B, self.company_gstin, self.company
-            ),
+            has_missing_2b_documents(date_range, ReturnType.GSTR2B, self.company_gstin, self.company),
         )
 
     @frappe.whitelist()
@@ -110,7 +123,7 @@ class PurchaseReconciliationTool(Document):
         return self.ReconciledData.get()
 
     @frappe.whitelist()
-    def upload_gstr(self, return_type, period, file_path):
+    def upload_gstr(self, return_type: str, period: str, file_path: str):
         frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
 
         return_type = ReturnType(return_type)
@@ -125,12 +138,12 @@ class PurchaseReconciliationTool(Document):
     @otp_handler
     def download_gstr(
         self,
-        company_gstin,
-        date_range,
-        return_type=None,
-        return_period=None,
+        company_gstin: str,
+        date_range: str | list,
+        return_type: str | None = None,
+        return_period: str | None = None,
         force: bool = False,
-        gst_categories=None,
+        gst_categories: str | list | None = None,
     ):
         frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
 
@@ -162,7 +175,11 @@ class PurchaseReconciliationTool(Document):
 
     @frappe.whitelist()
     def get_import_history(
-        self, company_gstin, return_type, date_range, for_download: bool = True
+        self,
+        company_gstin: str,
+        return_type: str,
+        date_range: str | list,
+        for_download: bool = True,
     ):
         frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
 
@@ -176,9 +193,7 @@ class PurchaseReconciliationTool(Document):
         action = "Download" if for_download else "Upload"
 
         return_type = ReturnType(return_type)
-        company_gstins = (
-            get_gstin_list(self.company) if company_gstin == "All" else [company_gstin]
-        )
+        company_gstins = get_gstin_list(self.company) if company_gstin == "All" else [company_gstin]
 
         for gst_no in company_gstins:
             periods = BaseUtil.get_periods(date_range, return_type, gst_no, True)
@@ -193,9 +208,7 @@ class PurchaseReconciliationTool(Document):
                     pending_download[period].add(gst_no)
 
                 elif has_single_gstin:
-                    download_history[period].add(
-                        download_row.last_updated_on.strftime("%d-%m-%Y %H:%M:%S")
-                    )
+                    download_history[period].add(download_row.last_updated_on.strftime("%d-%m-%Y %H:%M:%S"))
 
         # ensure data order is maintained
         def get_map(data):
@@ -207,7 +220,7 @@ class PurchaseReconciliationTool(Document):
         }
 
     @frappe.whitelist()
-    def get_return_period_from_file(self, return_type, file_path):
+    def get_return_period_from_file(self, return_type: str, file_path: str):
         """
         Permissions check not necessary as response is not sensitive
         """
@@ -227,7 +240,7 @@ class PurchaseReconciliationTool(Document):
             pass
 
     @frappe.whitelist()
-    def get_date_range(self, period):
+    def get_date_range(self, period: str):
         """
         Permissions check not necessary as response is not sensitive
         """
@@ -237,7 +250,7 @@ class PurchaseReconciliationTool(Document):
         return get_timespan_date_range(period.lower(), self.company)
 
     @frappe.whitelist()
-    def get_date_range_and_check_missing_documents(self, period):
+    def get_date_range_and_check_missing_documents(self, period: str):
         date_range = self.get_date_range(period)
 
         if not date_range:
@@ -245,33 +258,32 @@ class PurchaseReconciliationTool(Document):
 
         self.set_onload(
             "has_missing_2b_documents",
-            has_missing_2b_documents(
-                date_range, ReturnType.GSTR2B, self.company_gstin, self.company
-            ),
+            has_missing_2b_documents(date_range, ReturnType.GSTR2B, self.company_gstin, self.company),
         )
 
         return date_range
 
     @frappe.whitelist()
-    def get_invoice_details(self, purchase_name, inward_supply_name):
+    def get_invoice_details(self, purchase_name: str | None, inward_supply_name: str | None):
         frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
 
-        return self.ReconciledData.get_manually_matched_data(
-            purchase_name, inward_supply_name
-        )
+        return self.ReconciledData.get_manually_matched_data(purchase_name, inward_supply_name)
 
     @frappe.whitelist()
-    def link_documents(self, purchase_invoice_name, inward_supply_name, link_doctype):
+    def link_documents(
+        self,
+        purchase_invoice_name: str | None,
+        inward_supply_name: str | None,
+        link_doctype: str | None,
+    ):
         frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
 
-        purchases, inward_supplies = _link_documents(
-            purchase_invoice_name, inward_supply_name, link_doctype
-        )
+        purchases, inward_supplies = _link_documents(purchase_invoice_name, inward_supply_name, link_doctype)
 
         return self.ReconciledData.get(purchases, inward_supplies)
 
     @frappe.whitelist()
-    def unlink_documents(self, data):
+    def unlink_documents(self, data: str | list):
         frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
 
         purchases, inward_supplies = _unlink_documents(data)
@@ -279,7 +291,7 @@ class PurchaseReconciliationTool(Document):
         return self.ReconciledData.get(purchases, inward_supplies)
 
     @frappe.whitelist()
-    def apply_action(self, data, action):
+    def apply_action(self, data: str | dict | frappe._dict | list, action: str):
         frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
 
         data = frappe.parse_json(data)
@@ -307,15 +319,13 @@ class PurchaseReconciliationTool(Document):
                 boe.append(doc.get("purchase_invoice_name"))
 
         if inward_supplies:
-            frappe.db.set_value(
-                "GST Inward Supply", {"name": ("in", inward_supplies)}, "action", action
-            )
+            frappe.db.set_value("GST Inward Supply", {"name": ("in", inward_supplies)}, "action", action)
 
         set_reconciliation_status("Purchase Invoice", purchases, status)
         set_reconciliation_status("Bill of Entry", boe, status)
 
     @frappe.whitelist()
-    def get_link_options(self, doctype, filters):
+    def get_link_options(self, doctype: str, filters: dict | frappe._dict):
         frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
 
         if isinstance(filters, dict):
@@ -339,9 +349,7 @@ class PurchaseReconciliationTool(Document):
         )
 
         if not filters.show_matched:
-            query = query.where(
-                PI.name.notin(PurchaseInvoice.query_matched_purchase_invoice())
-            )
+            query = query.where(PI.name.notin(PurchaseInvoice.query_matched_purchase_invoice()))
 
         return get_formatted_options(query.run(as_dict=True))
 
@@ -370,9 +378,7 @@ class PurchaseReconciliationTool(Document):
         )
 
         if not filters.show_matched:
-            query = query.where(
-                BOE.name.notin(BillOfEntry.query_matched_bill_of_entry())
-            )
+            query = query.where(BOE.name.notin(BillOfEntry.query_matched_bill_of_entry()))
 
         return get_formatted_options(query.run(as_dict=True))
 
@@ -391,12 +397,13 @@ def download_gstr(
         periods = [return_period]
     else:
         periods = BaseUtil.get_periods(date_range, return_type, company_gstin)
-        periods = get_periods_to_download(
-            company_gstin, return_type, periods, download_all=force
-        )
+        periods = get_periods_to_download(company_gstin, return_type, periods, download_all=force)
 
     if not periods:
         return
+
+    latest_period = max(periods, key=period_sort_key)
+    _check_gstr3b_status(company_gstin, latest_period)
 
     try:
         if return_type == ReturnType.GSTR2A:
@@ -416,6 +423,34 @@ def download_gstr(
         )
 
 
+def _check_gstr3b_status(gstin, return_period):
+    """
+    Checks if the previous return period's GSTR-3B filing status is up-to-date locally.
+    If not, initiates a status update from the GST Portal via Public API.
+    """
+    if not (gstin and return_period):
+        return
+
+    company = get_party_for_gstin(gstin, "Company")
+    last_filed_period = get_latest_3b_filed_period(company, gstin)
+    if last_filed_period:
+        last_filed_period = last_filed_period[0]
+
+    prev_period = format_period(add_to_date(period_to_date(return_period), months=-1))
+
+    # If last filed period is recent enough (>= prev_period), local data is fresh
+    if last_filed_period and compare_periods(last_filed_period, prev_period) >= 0:
+        return
+
+    if not can_fetch_gstin_info():
+        return
+
+    try:
+        update_gstr_returns_info(company, gstin, get_fy(prev_period))
+    except Exception:
+        frappe.log_error(title="GSTR-3B Status Update Failed")
+
+
 def get_periods_to_download(company_gstin, return_type, periods, download_all=False):
     if return_type == ReturnType.GSTR2B:
         periods = filter_redownload_periods(company_gstin, return_type, periods)
@@ -424,9 +459,7 @@ def get_periods_to_download(company_gstin, return_type, periods, download_all=Fa
         return periods
 
     # get missing periods
-    existing_periods = get_import_history(
-        company_gstin, return_type, periods, pluck="return_period"
-    )
+    existing_periods = get_import_history(company_gstin, return_type, periods, pluck="return_period")
 
     return [period for period in periods if period not in existing_periods]
 
@@ -436,9 +469,7 @@ def filter_redownload_periods(company_gstin, return_type, periods):
     dont_redownload = get_import_history(
         company_gstin, return_type, periods, fields=("return_period", "dont_redownload")
     )
-    dont_redownload = [
-        log.return_period for log in dont_redownload if log.dont_redownload
-    ]
+    dont_redownload = [log.return_period for log in dont_redownload if log.dont_redownload]
 
     return [period for period in periods if period not in dont_redownload]
 
@@ -446,7 +477,7 @@ def filter_redownload_periods(company_gstin, return_type, periods):
 def get_import_history(
     company_gstins: list | str,
     return_type: ReturnType,
-    periods: List[str],
+    periods: list[str],
     *,
     fields=None,
     pluck=None,
@@ -476,12 +507,8 @@ def get_import_history(
     )
 
 
-def has_missing_2b_documents(
-    date_range, return_type: ReturnType, company_gstin, company
-):
-    company_gstins = (
-        get_gstin_list(company) if company_gstin == "All" else [company_gstin]
-    )
+def has_missing_2b_documents(date_range, return_type: ReturnType, company_gstin, company):
+    company_gstins = get_gstin_list(company) if company_gstin == "All" else [company_gstin]
 
     for gstin in company_gstins:
         periods = BaseUtil.get_periods(date_range, return_type, gstin, True)
@@ -504,7 +531,7 @@ def has_missing_2b_documents(
 
 
 @frappe.whitelist()
-def generate_excel_attachment(data, doc):
+def generate_excel_attachment(data: str | list, doc: str | dict | frappe._dict):
     frappe.has_permission("Purchase Reconciliation Tool", "email", throw=True)
 
     build_data = BuildExcel(doc, data, is_supplier_specific=True, email=True)
@@ -533,11 +560,27 @@ def generate_excel_attachment(data, doc):
 
 
 @frappe.whitelist()
-def download_excel_report(data, doc, is_supplier_specific: bool = False):
+def download_excel_report(
+    data: str | list, doc: str | dict | frappe._dict, is_supplier_specific: bool = False
+):
     frappe.has_permission("Purchase Reconciliation Tool", "export", throw=True)
 
     build_data = BuildExcel(doc, data, is_supplier_specific)
     build_data.export_data()
+
+
+@frappe.whitelist()
+def set_category_preference(categories: str | list | None = None):
+    frappe.has_permission("Purchase Reconciliation Tool", "write", throw=True)
+
+    if isinstance(categories, str):
+        categories = frappe.parse_json(categories) if categories else None
+
+    if not categories:
+        categories = []
+
+    categories = [c for c in categories if c in VALID_2A_CATEGORIES]
+    frappe.defaults.set_user_default(RECO_2A_CATEGORIES_KEY, frappe.as_json(categories))
 
 
 def parse_params(fun):
@@ -565,9 +608,7 @@ def auto_refresh_authtoken():
         },
         fields=["session_key", "session_expiry", "gstin", "auth_token"],
     ):
-        if credential.session_key and credential.session_expiry < add_to_date(
-            now_datetime(), minutes=10
-        ):
+        if credential.session_key and credential.session_expiry < add_to_date(now_datetime(), minutes=10):
             api = TaxpayerBaseAPI(credential.gstin)
             response = api.refresh_auth_token()
             api.process_response(response)
@@ -626,6 +667,7 @@ class AutoReconcile:
         """Returns True if reconciliation is enabled for the company and the session is valid"""
         return (
             credential_row.company in self.reconciliation_companies
+            and credential_row.session_expiry
             and credential_row.session_expiry >= now_datetime()
         )
 
@@ -766,9 +808,7 @@ class BuildExcel:
         """Add filters to the sheet"""
 
         label = "2B" if self.doc.gst_return == "GSTR 2B" else "2A/2B"
-        self.period = (
-            f"{self.doc.inward_supply_from_date} to {self.doc.inward_supply_to_date}"
-        )
+        self.period = f"{self.doc.inward_supply_from_date} to {self.doc.inward_supply_to_date}"
 
         self.filters = frappe._dict(
             {
@@ -794,9 +834,7 @@ class BuildExcel:
         )
 
     def get_supplier_data(self):
-        return self.process_data(
-            self.data.get("supplier_summary"), self.supplier_header
-        )
+        return self.process_data(self.data.get("supplier_summary"), self.supplier_header)
 
     def get_invoice_data(self):
         data = ReconciledData(**self.doc).get_consolidated_data(
@@ -841,6 +879,10 @@ class BuildExcel:
             return
 
         if "is_reverse_charge" in field:
+            target_data[field] = "Yes" if source_data.get(field) else "No"
+            return
+
+        if field in ("gstr_1_filled", "gstr_3b_filled"):
             target_data[field] = "Yes" if source_data.get(field) else "No"
             return
 
@@ -976,7 +1018,7 @@ class BuildExcel:
         ]
 
     def get_invoice_columns(self):
-        self.dimension_fields = ["project", "cost_center"] + get_accounting_dimensions()
+        self.dimension_fields = ["project", "cost_center", *get_accounting_dimensions()]
         dimension_columns = [
             {
                 "label": frappe.unscrub(dimension),
@@ -1007,7 +1049,7 @@ class BuildExcel:
                 "fieldname": "bill_date",
                 "compare_with": "inward_supply_bill_date",
                 "data_format": {
-                    "horizontal": "left",
+                    "horizontal": "center",
                     "bg_color": self.COLOR_PALLATE.light_green,
                 },
                 "header_format": {
@@ -1046,7 +1088,7 @@ class BuildExcel:
                 "fieldname": "is_reverse_charge",
                 "compare_with": "inward_supply_is_reverse_charge",
                 "data_format": {
-                    "horizontal": "left",
+                    "horizontal": "center",
                     "bg_color": self.COLOR_PALLATE.light_green,
                 },
                 "header_format": {
@@ -1144,7 +1186,7 @@ class BuildExcel:
                 "fieldname": "inward_supply_bill_date",
                 "compare_with": "bill_date",
                 "data_format": {
-                    "horizontal": "left",
+                    "horizontal": "center",
                     "bg_color": self.COLOR_PALLATE.light_blue,
                 },
                 "header_format": {
@@ -1183,7 +1225,7 @@ class BuildExcel:
                 "fieldname": "inward_supply_is_reverse_charge",
                 "compare_with": "is_reverse_charge",
                 "data_format": {
-                    "horizontal": "left",
+                    "horizontal": "center",
                     "bg_color": self.COLOR_PALLATE.light_blue,
                 },
                 "header_format": {
@@ -1266,7 +1308,7 @@ class BuildExcel:
             {
                 "label": "Action Status",
                 "fieldname": "action",
-                "data_format": {"horizontal": "left"},
+                "data_format": {"horizontal": "center"},
             },
             {
                 "label": "Match Status",
@@ -1289,9 +1331,9 @@ class BuildExcel:
             {
                 "label": "Classification",
                 "fieldname": "classification",
-                "data_format": {"horizontal": "left"},
+                "data_format": {"horizontal": "center"},
                 "header_format": {
-                    "width": 11,
+                    "width": 14,
                 },
             },
            *dimension_columns,
@@ -1334,6 +1376,60 @@ class BuildExcel:
                     "bg_color": self.COLOR_PALLATE.dark_pink,
                     "width": 12,
                 },
+            },
+            {
+                "label": "Differences",
+                "fieldname": "differences",
+                "data_format": {
+                    "horizontal": "left",
+                    "bg_color": self.COLOR_PALLATE.light_pink,
+                },
+                "header_format": {
+                    "bg_color": self.COLOR_PALLATE.dark_pink,
+                    "width": 25,
+                },
+            },
+            {
+                "label": "ITC Availability",
+                "fieldname": "itc_availability",
+                "data_format": {"horizontal": "left"},
+                "header_format": {"width": 12},
+            },
+            {
+                "label": "Reason for ITC Unavailability",
+                "fieldname": "reason_itc_unavailability",
+                "data_format": {"horizontal": "left"},
+                "header_format": {"width": 25},
+            },
+            {
+                "label": "GSTR-1 Filed",
+                "fieldname": "gstr_1_filled",
+                "data_format": {"horizontal": "center"},
+                "header_format": {"width": 12},
+            },
+            {
+                "label": "GSTR-3B Filed",
+                "fieldname": "gstr_3b_filled",
+                "data_format": {"horizontal": "center"},
+                "header_format": {"width": 12},
+            },
+            {
+                "label": "IRN Source",
+                "fieldname": "irn_source",
+                "data_format": {"horizontal": "center"},
+                "header_format": {"width": 15},
+            },
+            {
+                "label": "IRN Number",
+                "fieldname": "irn_number",
+                "data_format": {"horizontal": "left"},
+                "header_format": {"width": 35},
+            },
+            {
+                "label": "IRN Generation Date",
+                "fieldname": "irn_gen_date",
+                "data_format": {"horizontal": "center"},
+                "header_format": {"width": 15},
             },
         ]
         inv_columns.extend(self.inward_supply_columns)

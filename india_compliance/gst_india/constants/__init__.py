@@ -61,6 +61,7 @@ EXPORT_TYPES = (
 )
 
 TAXABLE_GST_TREATMENTS = ("Taxable", "Zero-Rated")
+IMPORT_GST_CATEGORIES = ("Overseas", "SEZ")
 
 
 STATE_NUMBERS = {
@@ -163,7 +164,7 @@ UOM_MAP = {
     "YDS": "YARDS",
 }
 
-# Not available for Telangana, Ladakh, and Other Territory
+# Not available for Other Territory
 STATE_PINCODE_MAPPING = {
     "Jammu and Kashmir": (180, 194),
     "Himachal Pradesh": (171, 177),
@@ -199,6 +200,8 @@ STATE_PINCODE_MAPPING = {
     "Puducherry": ((533, 533), (605, 605), (607, 607), (609, 609), (673, 673)),
     "Andaman and Nicobar Islands": (744, 744),
     "Andhra Pradesh": (500, 535),
+    "Telangana": ((500, 509), (518, 518), (533, 533)),
+    "Ladakh": ((180, 180), (181, 181), (184, 184), (190, 191), (194, 194)),
 }
 
 PORT_CODES = {
@@ -1482,3 +1485,6 @@ ORIGINAL_VS_AMENDED = (
 )
 
 E_INVOICE_MASTER_CODES_URL = "https://einvoice1.gst.gov.in/Others/MasterCodes"
+
+VALID_HSN_LENGTHS = (4, 6, 8)
+SERVICE_HSN_PREFIX = "99"
