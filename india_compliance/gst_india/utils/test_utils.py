@@ -1,6 +1,7 @@
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import frappe
 <<<<<<< HEAD
@@ -11,6 +12,7 @@ from frappe.tests import IntegrationTestCase, change_settings
 >>>>>>> 4e695ae8 (fix: add test for is_ship_to_gstin_applicable rollover behavior in IST)
 from frappe.utils import getdate
 
+from india_compliance.gst_india.constants import SHIP_TO_GSTIN_APPLICABLE_DATE, TIMEZONE
 from india_compliance.gst_india.utils import is_ship_to_gstin_applicable, validate_pincode
 
 
@@ -58,7 +60,9 @@ class TestUtils(FrappeTestCase):
     @change_settings("GST Settings", {"sandbox_mode": 0})
     def test_is_ship_to_gstin_applicable_rolls_over_in_ist(self):
         """NIC rolls over at midnight IST, whatever the site's own timezone is."""
-        rollover = datetime(2026, 7, 31, 18, 30, tzinfo=timezone.utc)  # 2026-08-01 00:00 IST
+        rollover = datetime.combine(
+            SHIP_TO_GSTIN_APPLICABLE_DATE, time(), tzinfo=ZoneInfo(TIMEZONE)
+        ).astimezone(timezone.utc)
 
         for time_zone in ("UTC", "Pacific/Kiritimati"):  # behind IST, then ahead of it
             with change_settings("System Settings", {"time_zone": time_zone}):
