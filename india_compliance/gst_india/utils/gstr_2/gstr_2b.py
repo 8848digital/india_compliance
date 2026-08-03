@@ -1,7 +1,11 @@
 import frappe
 
 from india_compliance.gst_india.utils import parse_datetime
-from india_compliance.gst_india.utils.gstr_2.gstr import GSTR, get_mapped_value
+from india_compliance.gst_india.utils.gstr_2.gstr import (
+    GSTR,
+    get_mapped_value,
+    get_unique_key,
+)
 
 
 class GSTR2b(GSTR):
@@ -14,12 +18,8 @@ class GSTR2b(GSTR):
             .where(gst_is.classification == self.category)
         ).run(as_dict=True)
 
-        return {
-            f"{transaction.get('supplier_gstin', '')}-{transaction.get('bill_no', '')}": transaction.get(
-                "name"
-            )
-            for transaction in existing_transactions
-        }
+        return {get_unique_key(transaction): transaction.get("name") for transaction in existing_transactions}
+
     def handle_missing_transactions(self):
         """
         For GSTR2b, only filed transactions are reported. They may be removed from GSTR-2b later
@@ -103,25 +103,18 @@ class GSTR2bB2B(GSTR2b):
             "cess": invoice.cess,
             "document_value": invoice.val,
             "place_of_supply": get_mapped_value(invoice.pos, self.VALUE_MAPS.states),
-            "is_reverse_charge": get_mapped_value(
-                invoice.rev, self.VALUE_MAPS.Y_N_to_check
-            ),
+            "is_reverse_charge": get_mapped_value(invoice.rev, self.VALUE_MAPS.Y_N_to_check),
             "itc_availability": get_mapped_value(
                 invoice.itcavl, {**self.VALUE_MAPS.yes_no, "T": "Temporary"}
             ),
             "reason_itc_unavailability": get_mapped_value(
                 invoice.rsn,
                 {
-                    "P": (
-                        "POS and supplier state are same but recipient state is"
-                        " different"
-                    ),
+                    "P": ("POS and supplier state are same but recipient state is different"),
                     "C": "Return filed post annual cut-off",
                 },
             ),
-            "diffprcnt": get_mapped_value(
-                invoice.diffprcnt, {1: 1, 0.65: 0.65, None: 1}
-            ),
+            "diffprcnt": get_mapped_value(invoice.diffprcnt, {1: 1, 0.65: 0.65, None: 1}),
             "irn_source": invoice.srctyp,
             "irn_number": invoice.irn,
             "irn_gen_date": parse_datetime(invoice.irngendate, day_first=True),
@@ -152,9 +145,7 @@ class GSTR2bCDNR(GSTR2bB2B):
             {
                 "bill_no": invoice.ntnum,
                 "doc_type": get_mapped_value(invoice.typ, self.VALUE_MAPS.note_type),
-                "supply_type": get_mapped_value(
-                    invoice.suptyp, self.VALUE_MAPS.gst_category
-                ),
+                "supply_type": get_mapped_value(invoice.suptyp, self.VALUE_MAPS.gst_category),
             }
         )
         return invoice_details
@@ -167,9 +158,7 @@ class GSTR2bCDNRA(GSTR2bCDNR):
             {
                 "original_bill_no": invoice.ontnum,
                 "original_bill_date": parse_datetime(invoice.ontdt, day_first=True),
-                "original_doc_type": get_mapped_value(
-                    invoice.onttyp, self.VALUE_MAPS.note_type
-                ),
+                "original_doc_type": get_mapped_value(invoice.onttyp, self.VALUE_MAPS.note_type),
             }
         )
         return invoice_details
@@ -185,9 +174,7 @@ class GSTR2bISD(GSTR2b):
             "doc_type": get_mapped_value(invoice.doctyp, self.VALUE_MAPS.isd_type_2b),
             "bill_no": invoice.docnum,
             "bill_date": parse_datetime(invoice.docdt, day_first=True),
-            "itc_availability": get_mapped_value(
-                invoice.itcelg, self.VALUE_MAPS.yes_no
-            ),
+            "itc_availability": get_mapped_value(invoice.itcelg, self.VALUE_MAPS.yes_no),
             "igst": invoice.igst,
             "cgst": invoice.cgst,
             "sgst": invoice.sgst,
@@ -203,9 +190,7 @@ class GSTR2bISDA(GSTR2bISD):
             {
                 "original_bill_no": invoice.odocnum,
                 "original_bill_date": parse_datetime(invoice.odocdt, day_first=True),
-                "original_doc_type": get_mapped_value(
-                    invoice.odoctyp, self.VALUE_MAPS.isd_type_2b
-                ),
+                "original_doc_type": get_mapped_value(invoice.odoctyp, self.VALUE_MAPS.isd_type_2b),
             }
         )
         return invoice_details
