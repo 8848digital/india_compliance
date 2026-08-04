@@ -28,6 +28,7 @@ setup_wizard_stages = "india_compliance.setup_wizard.get_setup_wizard_stages"
 
 app_include_js = "india_compliance.bundle.js"
 
+# Doctype JavaScript
 doctype_js = {
     "Address": [
         "gst_india/client_scripts/party.js",
