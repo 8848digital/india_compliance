@@ -23,6 +23,7 @@
   "is_retry_einv_ewb_generation_pending",
   "column_break_rk3h",
   "sandbox_mode",
+  "use_fallback_for_nic",
   "e_waybill_section",
   "enable_e_waybill",
   "enable_e_waybill_from_dn",
@@ -33,9 +34,11 @@
   "attach_e_waybill_print",
   "column_break_10",
   "auto_generate_e_waybill",
-  "e_waybill_threshold",
   "auto_cancel_e_waybill",
   "reason_for_e_waybill_cancellation",
+  "section_break_qtlk",
+  "e_waybill_threshold",
+  "e_waybill_threshold_for_intrastate",
   "e_invoice_section",
   "enable_e_invoice",
   "generate_e_waybill_with_e_invoice",
@@ -44,9 +47,9 @@
   "restrict_cancel_if_e_invoice_final",
   "reason_for_e_invoice_cancellation",
   "e_invoice_reporting_time_limit_days",
-  "use_fallback_for_nic",
   "column_break_17",
   "fetch_e_invoice_details_from_gst_portal",
+  "include_nil_exempted_in_e_invoice",
   "apply_e_invoice_only_for_selected_companies",
   "e_invoice_applicable_from",
   "e_invoice_applicable_companies",
@@ -71,18 +74,6 @@
   "enable_auto_reconciliation",
   "inward_supply_period",
   "column_break_zlfe",
-  "gst_categories_section",
-  "reconcile_for_b2b",
-  "reconcile_for_b2ba",
-  "column_break_notc",
-  "reconcile_for_cdnr",
-  "reconcile_for_cdnra",
-  "column_break_jpws",
-  "reconcile_for_isd",
-  "reconcile_for_isda",
-  "column_break_brkt",
-  "reconcile_for_impg",
-  "reconcile_for_impgsez",
   "auto_reconciliation_days_section",
   "reconcile_on_monday",
   "reconcile_on_friday",
@@ -132,7 +123,7 @@
   },
   {
    "default": "1",
-   "description": "As per <a href=\"https://old.cbic.gov.in/resources/htdocs-cbec/gst/notfctn-78-central-tax-english-2020.pdf\">Central Tax Notification No. 78/2020</a>, HSN/SAC code must be specified in Sales Invoice with atleast 4 or 6 digits (based on turnover)",
+   "description": "As per <a href=\"https://old.cbic.gov.in/resources/htdocs-cbec/gst/notfctn-78-central-tax-english-2020.pdf\" rel=\"noopener noreferrer\">Central Tax Notification No. 78/2020</a>, HSN/SAC code must be specified in Sales Invoice with atleast 4 or 6 digits (based on turnover)",
    "fieldname": "validate_hsn_code",
    "fieldtype": "Check",
    "label": "Validate HSN/SAC Code in Sales Items and Transactions"
@@ -144,7 +135,7 @@
    "fieldtype": "Select",
    "label": "Minimum HSN/SAC Code Digits",
    "mandatory_depends_on": "eval: doc.validate_hsn_code",
-   "options": "4\n6"
+   "options": "4\n6\n8"
   },
   {
    "fieldname": "accounts_tab",
@@ -223,7 +214,7 @@
    "description": "When selling goods with total Sales Invoice value greater than this amount, a prompt will be displayed if e-Waybill hasn't been generated upon submission",
    "fieldname": "e_waybill_threshold",
    "fieldtype": "Currency",
-   "label": "Invoice Value Threshold for e-Waybill Generation"
+   "label": "Default Threshold Value for e-Waybill Generation"
   },
   {
    "default": "1",
@@ -403,6 +394,12 @@
    "label": "GSTN Public Certificate"
   },
   {
+   "fieldname": "nic_public_key",
+   "fieldtype": "Code",
+   "hidden": 1,
+   "label": "NIC Public Key"
+  },
+  {
    "default": "0",
    "depends_on": "eval: doc.enable_e_waybill",
    "fieldname": "enable_e_waybill_from_pr",
@@ -446,24 +443,6 @@
    "fieldname": "inward_supply_period",
    "fieldtype": "Int",
    "label": "Inward Supply Period in months"
-  },
-  {
-   "depends_on": "eval: doc.enable_auto_reconciliation",
-   "fieldname": "gst_categories_section",
-   "fieldtype": "Section Break",
-   "label": "GST Categories"
-  },
-  {
-   "fieldname": "column_break_brkt",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_break_notc",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_break_jpws",
-   "fieldtype": "Column Break"
   },
   {
    "fieldname": "column_break_koqs",
@@ -514,54 +493,6 @@
    "fieldname": "reconcile_on_thursday",
    "fieldtype": "Check",
    "label": "Thursday"
-  },
-  {
-   "default": "1",
-   "fieldname": "reconcile_for_b2b",
-   "fieldtype": "Check",
-   "label": "B2B"
-  },
-  {
-   "default": "0",
-   "fieldname": "reconcile_for_b2ba",
-   "fieldtype": "Check",
-   "label": "B2BA"
-  },
-  {
-   "default": "1",
-   "fieldname": "reconcile_for_cdnr",
-   "fieldtype": "Check",
-   "label": "CDNR"
-  },
-  {
-   "default": "0",
-   "fieldname": "reconcile_for_cdnra",
-   "fieldtype": "Check",
-   "label": "CDNRA"
-  },
-  {
-   "default": "0",
-   "fieldname": "reconcile_for_isd",
-   "fieldtype": "Check",
-   "label": "ISD"
-  },
-  {
-   "default": "0",
-   "fieldname": "reconcile_for_isda",
-   "fieldtype": "Check",
-   "label": "ISDA"
-  },
-  {
-   "default": "0",
-   "fieldname": "reconcile_for_impg",
-   "fieldtype": "Check",
-   "label": "IMPG"
-  },
-  {
-   "default": "0",
-   "fieldname": "reconcile_for_impgsez",
-   "fieldtype": "Check",
-   "label": "IMPGSEZ"
   },
   {
    "default": "0",
@@ -684,6 +615,14 @@
    "label": "Restrict Cancellation if e-Invoice not Cancellable"
   },
   {
+   "default": "0",
+   "depends_on": "eval: doc.enable_e_invoice",
+   "description": "If enabled, Nil Rated / Exempted / Non-GST items will be included as separate line items in the e-Invoice with their value reported as item-level Other Charges. If disabled, these items are excluded from the item list and their total value is reported as invoice-level Other Charges.",
+   "fieldname": "include_nil_exempted_in_e_invoice",
+   "fieldtype": "Check",
+   "label": "Include Nil Rated / Exempted Items as Line Items in e-Invoice"
+  },
+  {
    "default": "30",
    "depends_on": "eval: doc.enable_e_invoice",
    "description": "Maximum number of days allowed for e-invoice generation after posting date",
@@ -692,25 +631,30 @@
    "label": "e-Invoice Reporting Time Limit (in Days)"
   },
   {
-   "fieldname": "nic_public_key",
-   "fieldtype": "Code",
-   "hidden": 1,
-   "label": "NIC Public Key"
-  },
-  {
    "default": "1",
    "depends_on": "eval: india_compliance.is_api_enabled(doc)",
    "description": "Check this box only if API requests are failing with invalid certificate error",
    "fieldname": "use_fallback_for_nic",
    "fieldtype": "Check",
    "label": "Use Fallback APIs for e-Waybill and e-Invoice"
+  },
+  {
+   "depends_on": "eval: india_compliance.is_api_enabled(doc) && doc.enable_e_waybill",
+   "fieldname": "section_break_qtlk",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "e_waybill_threshold_for_intrastate",
+   "fieldtype": "Table",
+   "label": "e-Waybill Threshold for Intrastate",
+   "options": "State-wise e-Waybill Threshold"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-11-12 11:23:44.812599",
+ "modified": "2026-04-13 14:12:37.837904",
  "modified_by": "Administrator",
  "module": "GST India",
  "name": "GST Settings",
@@ -737,6 +681,7 @@
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],

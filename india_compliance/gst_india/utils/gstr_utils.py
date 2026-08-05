@@ -11,7 +11,7 @@ from india_compliance.gst_india.doctype.gstr_import_log.gstr_import_log import (
     create_import_log,
     toggle_scheduled_jobs,
 )
-from india_compliance.gst_india.utils import create_notification
+from india_compliance.gst_india.utils import create_notification, validate_gstin_permission
 from india_compliance.gst_india.utils.gstr_1.gstr_1_download import (
     save_gstr_1_filed_data,
     save_gstr_1_unfiled_data,
@@ -27,16 +27,18 @@ class ReturnType(Enum):
 
 
 @frappe.whitelist()
+@validate_gstin_permission
 @otp_handler
-def request_otp(company_gstin):
+def request_otp(company_gstin: str):
     frappe.has_permission("GST Settings", throw=True)
 
     return TaxpayerBaseAPI(company_gstin).request_otp()
 
 
 @frappe.whitelist()
+@validate_gstin_permission
 @otp_handler
-def authenticate_otp(company_gstin, otp):
+def authenticate_otp(company_gstin: str, otp: str):
     frappe.has_permission("GST Settings", throw=True)
 
     api = TaxpayerBaseAPI(company_gstin)
@@ -46,8 +48,9 @@ def authenticate_otp(company_gstin, otp):
 
 
 @frappe.whitelist()
+@validate_gstin_permission(doctype="GST Return Log")
 @otp_handler
-def generate_evc_otp(company_gstin, pan, request_type):
+def generate_evc_otp(company_gstin: str, pan: str, request_type: str):
     frappe.has_permission("GSTR-1 Beta", "write", throw=True)
     return TaxpayerBaseAPI(company_gstin).initiate_otp_for_evc(pan, request_type)
 

@@ -23,6 +23,7 @@ class GSTR1_Category(Enum):
     HSN = "HSN Summary"
     DOC_ISSUE = "Document Issued"
     SUPECOM = "Supplies made through E-commerce Operators"
+    ECOM_RCM = "Supplies through E-commerce Operators u/s 9(5)"
 
 
 class GSTR1_SubCategory(Enum):
@@ -105,6 +106,7 @@ class GSTR1_DataField:
     TRANSACTION_TYPE = "transaction_type"
     CUST_GSTIN = "customer_gstin"
     ECOMMERCE_GSTIN = "ecommerce_gstin"
+    ECOMMERCE_OPERATOR_NAME = "ecommerce_operator_name"
     CUST_NAME = "customer_name"
     DOC_DATE = "document_date"
     DOC_NUMBER = "document_number"
@@ -308,6 +310,8 @@ class GovExcelSheetName(Enum):
     HSN_B2B = "hsn(b2b)"
     HSN_B2C = "hsn(b2c)"
     DOC_ISSUE = "docs"
+    SUPECOM = "eco"
+    MASTER = "master"
 
 
 SUB_CATEGORY_GOV_CATEGORY_MAPPING = {
@@ -345,6 +349,7 @@ JSON_CATEGORY_EXCEL_CATEGORY_MAPPING = {
     GovJsonKey.TXP.value: GovExcelSheetName.TXP.value,
     GovJsonKey.HSN.value: GovExcelSheetName.HSN.value,
     GovJsonKey.DOC_ISSUE.value: GovExcelSheetName.DOC_ISSUE.value,
+    GovJsonKey.SUPECOM.value: GovExcelSheetName.SUPECOM.value,
     # only for excel
     HSNKey.HSN_B2B.value: GovExcelSheetName.HSN_B2B.value,
     HSNKey.HSN_B2C.value: GovExcelSheetName.HSN_B2C.value,
@@ -364,11 +369,11 @@ SUBCATEGORIES_NOT_CONSIDERED_IN_TOTAL_TAXABLE_VALUE = [
     GSTR1_SubCategory.HSN_B2C.value,
     GSTR1_SubCategory.DOC_ISSUE.value,
     GSTR1_SubCategory.SUPECOM_52.value,
-    GSTR1_SubCategory.SUPECOM_9_5.value,
 ]
 
 SUBCATEGORIES_NOT_CONSIDERED_IN_TOTAL_TAX = [
     GSTR1_SubCategory.B2B_REVERSE_CHARGE.value,
+    GSTR1_SubCategory.SUPECOM_9_5.value,
     *SUBCATEGORIES_NOT_CONSIDERED_IN_TOTAL_TAXABLE_VALUE,
 ]
 

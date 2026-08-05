@@ -1,5 +1,4 @@
 import click
-
 import frappe
 import random
 import json
@@ -31,6 +30,7 @@ POST_INSTALL_PATCHES = (
     "rename_import_of_capital_goods",
     "update_hsn_code",
     "update_company_fixtures",
+    "set_india_compliance_default_tax_category",
     "merge_utgst_account_into_sgst_account",
     "remove_consumer_gst_category",
     "migrate_e_invoice_settings_to_gst_settings",
@@ -50,6 +50,7 @@ POST_INSTALL_PATCHES = (
     "update_reconciliation_status",
     "update_vehicle_no_field_in_purchase_receipt",
     "update_gst_treatment_for_taxable_nil_transaction_item",  # it should be always after improve item tax template
+    "update_gst_treatment_for_import_transactions",
     "migrate_fields_for_gstr3b",
 )
 
@@ -107,9 +108,7 @@ def disable_ic_account_page():
     Disable the India Compliance Account Page if API secret is set in frappe.conf
     """
 
-    if not frappe.conf.ic_api_secret or frappe.db.exists(
-        "Custom Role", {"page": "india-compliance-account"}
-    ):
+    if not frappe.conf.ic_api_secret or frappe.db.exists("Custom Role", {"page": "india-compliance-account"}):
         return
 
     frappe.get_doc(doctype="Custom Role", page="india-compliance-account").insert()

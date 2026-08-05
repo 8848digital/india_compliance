@@ -1,15 +1,25 @@
 import frappe
+from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_sales_return
 from frappe.tests.utils import FrappeTestCase, change_settings
 from frappe.utils import flt, getdate
-from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_sales_return
 
+from india_compliance.gst_india.doctype.gst_return_log.generate_gstr_1 import SummarizeGSTR1
+from india_compliance.gst_india.doctype.gstr_1_beta.gstr_1_export import GovExcel
 from india_compliance.gst_india.overrides.company import create_default_company_account
 from india_compliance.gst_india.utils import get_full_gst_uom
 from india_compliance.gst_india.utils.gstr_1 import (
+    GovJsonKey,
     GSTR1_B2B_InvoiceType,
     GSTR1_SubCategory,
 )
-from india_compliance.gst_india.utils.gstr_1.gstr_1_json_map import GSTR1BooksData
+from india_compliance.gst_india.utils.gstr_1 import (
+    GSTR1_DataField as inv_f,
+)
+from india_compliance.gst_india.utils.gstr_1.gstr_1_data import GSTR1Invoices
+from india_compliance.gst_india.utils.gstr_1.gstr_1_json_map import (
+    BooksDataMapper,
+    GSTR1BooksData,
+)
 from india_compliance.gst_india.utils.tests import (
     _append_taxes,
     append_item,
@@ -103,9 +113,7 @@ class TestGSTR1BooksData(FrappeTestCase):
 
     def test_b2b_regular_transaction_with_gst_inclusive_price(self):
         setup_cess_account()
-        si = create_sales_invoice(
-            customer="_Test Registered Customer", do_not_submit=True
-        )
+        si = create_sales_invoice(customer="_Test Registered Customer", do_not_submit=True)
         _append_taxes(si, ["CGST", "SGST"], included_in_print_rate=True)
         _append_taxes(si, "CESS", rate=2, included_in_print_rate=True)
         si.save()
@@ -151,9 +159,7 @@ class TestGSTR1BooksData(FrappeTestCase):
             for i in range(1, 7):
                 append_item(
                     si,
-                    data=frappe._dict(
-                        gst_hsn_code=random_hsn_codes[i % 4], qty=1.0, rate=1.003
-                    ),
+                    data=frappe._dict(gst_hsn_code=random_hsn_codes[i % 4], qty=1.0, rate=1.003),
                 )
 
             si.save()
@@ -202,9 +208,7 @@ class TestGSTR1BooksData(FrappeTestCase):
             for i in range(1, 7):
                 append_item(
                     si,
-                    data=frappe._dict(
-                        gst_hsn_code=random_hsn_codes[i % 4], qty=1.0, rate=1.003
-                    ),
+                    data=frappe._dict(gst_hsn_code=random_hsn_codes[i % 4], qty=1.0, rate=1.003),
                 )
 
             si.save()
@@ -665,9 +669,7 @@ class TestGSTR1BooksData(FrappeTestCase):
                 "exempted_amount": 0.0,
                 "non_gst_amount": 0.0,
             },
-            data[GSTR1_SubCategory.NIL_EXEMPT.value][
-                "Intra-State supplies to registered persons"
-            ][0],
+            data[GSTR1_SubCategory.NIL_EXEMPT.value]["Intra-State supplies to registered persons"][0],
         )
 
         self.assertDictEq(
@@ -682,9 +684,7 @@ class TestGSTR1BooksData(FrappeTestCase):
                 "exempted_amount": 0.0,
                 "non_gst_amount": 0.0,
             },
-            data[GSTR1_SubCategory.NIL_EXEMPT.value][
-                "Intra-State supplies to unregistered persons"
-            ][0],
+            data[GSTR1_SubCategory.NIL_EXEMPT.value]["Intra-State supplies to unregistered persons"][0],
         )
 
     def test_b2cs_transaction(self):
@@ -727,21 +727,9 @@ class TestGSTR1BooksData(FrappeTestCase):
         data = GSTR1BooksData(filters=FILTERS).prepare_mapped_data()
 
         for si in si_s:
-            igst_rate = (
-                place_of_supplies[si.place_of_supply].get("igst_rate", 0.0)
-                / 100
-                * si.total
-            )
-            cgst_rate = (
-                place_of_supplies[si.place_of_supply].get("cgst_rate", 0.0)
-                / 100
-                * si.total
-            )
-            sgst_rate = (
-                place_of_supplies[si.place_of_supply].get("sgst_rate", 0.0)
-                / 100
-                * si.total
-            )
+            igst_rate = place_of_supplies[si.place_of_supply].get("igst_rate", 0.0) / 100 * si.total
+            cgst_rate = place_of_supplies[si.place_of_supply].get("cgst_rate", 0.0) / 100 * si.total
+            sgst_rate = place_of_supplies[si.place_of_supply].get("sgst_rate", 0.0) / 100 * si.total
             self.assertDictEq(
                 {
                     "document_value": 118.0,
@@ -758,6 +746,409 @@ class TestGSTR1BooksData(FrappeTestCase):
                 },
                 data[GSTR1_SubCategory.B2CS.value][f"{si.place_of_supply} - 18.0"][0],
             )
+
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_b2cs_overseas_intra_state_credit_note(self):
+        # Foreign customer with an Overseas billing address (no GSTIN), but the supply is
+        # delivered within India to a Gujarat shipping address (POS = 24-Gujarat, not
+        # "96-Other Countries").this is a B2C intra-state supply
+        # NOT exports/CDNUR.
+        si = create_sales_invoice(
+            customer="_Test Foreign Customer-1",
+            customer_address="_Test Foreign Customer-1-Billing",
+            shipping_address_name="_Test Foreign Customer-1-Shipping",
+            place_of_supply="24-Gujarat",
+            is_in_state=True,
+        )
+
+        cn = make_sales_return(si.name).save()
+        cn.submit()
+
+        data = GSTR1BooksData(filters=FILTERS).prepare_mapped_data()
+
+        b2cs_rows = data[GSTR1_SubCategory.B2CS.value]["24-Gujarat - 18.0"]
+        by_doc = {row["document_number"]: row for row in b2cs_rows}
+
+        # Both SI and CN land in B2CS under the same POS + rate key
+        self.assertIn(si.name, by_doc)
+        self.assertIn(cn.name, by_doc)
+
+        self.assertEqual(
+            by_doc[si.name]["total_taxable_value"] + by_doc[cn.name]["total_taxable_value"],
+            0.0,
+        )
+
+        self.assertNotIn(cn.name, data.get(GSTR1_SubCategory.CDNUR.value, {}))
+
+    def test_cdnur_credit_note_not_double_counted_in_b2cs(self):
+        # Inter-state B2C (Unregistered) invoice ABOVE the B2CL threshold (> 1 lakh),
+        # then a PARTIAL credit note whose own value is BELOW the threshold.
+        # the CN belongs only in CDNUR (Table 9B)
+        si = create_sales_invoice(
+            customer="_Test Unregistered Customer",
+            place_of_supply="27-Maharashtra",  # inter-state vs company GSTIN 24...
+            is_out_state=True,
+            qty=10,
+            rate=20000,  # original invoice value 2,00,000 > 1,00,000
+        )
+
+        cn = make_sales_return(si.name)
+        cn.items[0].qty = -1  # partial return: CN own value 20,000 < 1,00,000
+        cn.save()
+        cn.submit()
+
+        data = GSTR1BooksData(filters=FILTERS).prepare_mapped_data()
+
+        # CN must appear in CDNUR
+        self.assertIn(cn.name, data.get(GSTR1_SubCategory.CDNUR.value, {}))
+
+        # CN must NOT also appear anywhere in B2CS (any POS + rate list)
+        b2cs = data.get(GSTR1_SubCategory.B2CS.value, {})
+        b2cs_docs = {row["document_number"] for rows in b2cs.values() for row in rows}
+        self.assertNotIn(cn.name, b2cs_docs)
+
+    def test_b2cs_credit_note_below_b2cl_limit_stays_in_b2cs(self):
+        si = create_sales_invoice(
+            customer="_Test Unregistered Customer",
+            place_of_supply="27-Maharashtra",  # inter-state vs company GSTIN 24...
+            is_out_state=True,
+            qty=1,
+            rate=5000,  # original invoice value 5,900 < 1,00,000
+        )
+
+        cn = make_sales_return(si.name).save()
+        cn.submit()
+
+        data = GSTR1BooksData(filters=FILTERS).prepare_mapped_data()
+
+        # CN lands in B2CS under the POS + rate key, with negative (return) values
+        b2cs_rows = data[GSTR1_SubCategory.B2CS.value]["27-Maharashtra - 18.0"]
+        cn_row = next(row for row in b2cs_rows if row["document_number"] == cn.name)
+        self.assertDictEq(
+            {
+                "transaction_type": "Credit Note",
+                "document_type": "OE",
+                "place_of_supply": "27-Maharashtra",
+                "total_taxable_value": -5000.0,
+                "total_igst_amount": -900.0,
+                "tax_rate": 18.0,
+            },
+            cn_row,
+        )
+
+        # CN must NOT leak into CDNUR
+        self.assertNotIn(cn.name, data.get(GSTR1_SubCategory.CDNUR.value, {}))
+
+    def test_cdnur_full_value_b2cl_credit_note(self):
+        # Full credit note of an inter-state B2C (Unregistered) invoice ABOVE the B2CL
+        # threshold.The CN belongs in CDNUR (Table 9B) with type "B2CL".
+        si = create_sales_invoice(
+            customer="_Test Unregistered Customer",
+            place_of_supply="27-Maharashtra",
+            is_out_state=True,
+            qty=10,
+            rate=20000,  # original invoice value 2,00,000 > 1,00,000
+        )
+
+        cn = make_sales_return(si.name).save()
+        cn.submit()
+
+        data = GSTR1BooksData(filters=FILTERS).prepare_mapped_data()
+
+        self.assertDictEq(
+            {
+                "transaction_type": "Credit Note",
+                "document_number": cn.name,
+                "document_type": "B2CL",
+                "place_of_supply": "27-Maharashtra",
+                "total_taxable_value": -200000.0,
+                "total_igst_amount": -36000.0,
+                "total_cgst_amount": 0.0,
+                "total_sgst_amount": 0.0,
+            },
+            data[GSTR1_SubCategory.CDNUR.value][cn.name],
+        )
+
+        # CN must NOT also appear anywhere in B2CS
+        b2cs = data.get(GSTR1_SubCategory.B2CS.value, {})
+        b2cs_docs = {row["document_number"] for rows in b2cs.values() for row in rows}
+        self.assertNotIn(cn.name, b2cs_docs)
+
+    def test_cdnur_debit_note(self):
+        # Debit note (is_debit_note) against an inter-state B2C (Unregistered) invoice ABOVE
+        # the B2CL threshold classified under CDNUR (Table 9B) with type "B2CL".
+        si = create_sales_invoice(
+            customer="_Test Unregistered Customer",
+            place_of_supply="27-Maharashtra",
+            is_out_state=True,
+            qty=10,
+            rate=20000,  # original invoice value 2,00,000 > 1,00,000
+        )
+
+        dn = make_sales_return(si.name)
+        dn.is_return = 0
+        dn.is_debit_note = 1
+        for item in dn.items:
+            item.qty = abs(item.qty)  # debit note: positive quantities
+        dn.save()
+        dn.submit()
+
+        data = GSTR1BooksData(filters=FILTERS).prepare_mapped_data()
+
+        self.assertDictEq(
+            {
+                "transaction_type": "Debit Note",
+                "document_number": dn.name,
+                "document_type": "B2CL",
+                "place_of_supply": "27-Maharashtra",
+                "total_taxable_value": 200000.0,
+                "total_igst_amount": 36000.0,
+            },
+            data[GSTR1_SubCategory.CDNUR.value][dn.name],
+        )
+
+        # DN must NOT appear in B2CS
+        b2cs = data.get(GSTR1_SubCategory.B2CS.value, {})
+        b2cs_docs = {row["document_number"] for rows in b2cs.values() for row in rows}
+        self.assertNotIn(dn.name, b2cs_docs)
+
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    def test_cdnur_export_credit_note_without_tax(self):
+        # Credit note of an export invoice WITHOUT payment of tax. The CN belongs
+        # in CDNUR (Table 9B) with type "EXPWOP" and zero IGST.
+        si = create_sales_invoice(
+            customer="_Test Foreign Customer",
+            customer_address="_Test Foreign Customer-Billing",
+        )
+
+        cn = make_sales_return(si.name).save()
+        cn.submit()
+
+        data = GSTR1BooksData(filters=FILTERS).prepare_mapped_data()
+
+        self.assertDictEq(
+            {
+                "transaction_type": "Credit Note",
+                "document_number": cn.name,
+                "document_type": "EXPWOP",
+                "place_of_supply": "96-Other Countries",
+                "total_taxable_value": -100.0,
+                "total_igst_amount": 0.0,
+            },
+            data[GSTR1_SubCategory.CDNUR.value][cn.name],
+        )
+
+    def test_ecommerce_invoices_aggregate_under_supecom(self):
+        ecommerce_gstin_1 = "20ALYPD6528PQC5"
+        ecommerce_gstin_2 = "29AABCF8078M1C8"
+
+        # Two invoices for operator 1 (count is row-based, not invoice-based)
+        create_sales_invoice(
+            customer="_Test Registered Customer",
+            is_in_state=True,
+            ecommerce_gstin=ecommerce_gstin_1,
+        )
+        create_sales_invoice(
+            customer="_Test Unregistered Customer",
+            place_of_supply="27-Maharashtra",
+            is_in_state=False,
+            is_out_state=True,
+            ecommerce_gstin=ecommerce_gstin_1,
+        )
+
+        # One invoice for operator 2
+        create_sales_invoice(
+            customer="_Test Registered Customer",
+            is_in_state=True,
+            ecommerce_gstin=ecommerce_gstin_2,
+        )
+
+        data = GSTR1BooksData(filters=FILTERS).prepare_mapped_data()
+
+        self.assertIn(GSTR1_SubCategory.SUPECOM_52.value, data)
+        supecom_rows = data[GSTR1_SubCategory.SUPECOM_52.value]
+        self.assertIn(ecommerce_gstin_1, supecom_rows)
+        self.assertIn(ecommerce_gstin_2, supecom_rows)
+        self.assertEqual(len(supecom_rows), 2)
+
+        row_1 = supecom_rows[ecommerce_gstin_1]
+        row_2 = supecom_rows[ecommerce_gstin_2]
+
+        for row, gstin in ((row_1, ecommerce_gstin_1), (row_2, ecommerce_gstin_2)):
+            self.assertEqual(row[inv_f.DOC_TYPE], GSTR1_SubCategory.SUPECOM_52.value)
+            self.assertEqual(row[inv_f.ECOMMERCE_GSTIN], gstin)
+            self.assertIn(inv_f.ECOMMERCE_OPERATOR_NAME, row)
+            self.assertNotIn("no_of_records", row)
+            self.assertGreater(row[inv_f.TAXABLE_VALUE], 0)
+            # Frontend summary/detail reads invoice-level total tax fields.
+            self.assertIn(inv_f.IGST, row)
+            self.assertIn(inv_f.CGST, row)
+            self.assertIn(inv_f.SGST, row)
+
+        # Operator 1 has in-state + out-state invoices, so it should have both
+        # IGST and CGST/SGST in aggregate.
+        self.assertGreater(row_1[inv_f.IGST], 0)
+        self.assertGreater(row_1[inv_f.CGST], 0)
+        self.assertGreater(row_1[inv_f.SGST], 0)
+
+    @change_settings(
+        "GST Settings",
+        {
+            "enable_reverse_charge_in_sales": 1,
+            "enable_sales_through_ecommerce_operators": 1,
+        },
+    )
+    def test_9_5_reported_only_in_supecom(self):
+        si = create_sales_invoice(
+            customer="_Test Registered Customer",
+            is_reverse_charge=True,
+            is_in_state=True,
+            is_in_state_rcm=True,
+            ecommerce_gstin="20ALYPD6528PQC5",
+        )
+
+        data = GSTR1BooksData(filters=FILTERS).prepare_mapped_data()
+
+        self.assertIn(GSTR1_SubCategory.SUPECOM_9_5.value, data)
+        supecom = data[GSTR1_SubCategory.SUPECOM_9_5.value]
+        self.assertIn("20ALYPD6528PQC5", supecom)
+        self.assertGreater(supecom["20ALYPD6528PQC5"][inv_f.TAXABLE_VALUE], 0)
+
+        self.assertNotIn(si.name, data.get(GSTR1_SubCategory.B2B_REVERSE_CHARGE.value, {}))
+        for hsn in (
+            GSTR1_SubCategory.HSN_B2B.value,
+            GSTR1_SubCategory.HSN_B2C.value,
+            GSTR1_SubCategory.HSN.value,
+        ):
+            self.assertNotIn(hsn, data)
+
+        overview = {row["description"]: row for row in GSTR1Invoices(FILTERS).get_overview()}
+        self.assertNotIn(si.name, overview[GSTR1_SubCategory.B2B_REVERSE_CHARGE.value]["unique_records"])
+        self.assertIn(si.name, overview[GSTR1_SubCategory.SUPECOM_9_5.value]["unique_records"])
+
+    @change_settings("GST Settings", {"enable_sales_through_ecommerce_operators": 1})
+    def test_52_reported_in_both_primary_and_supecom(self):
+        si = create_sales_invoice(
+            customer="_Test Registered Customer",
+            is_in_state=True,
+            ecommerce_gstin="20ALYPD6528PQC5",
+        )
+
+        data = GSTR1BooksData(filters=FILTERS).prepare_mapped_data()
+
+        self.assertIn(si.name, data.get(GSTR1_SubCategory.B2B_REGULAR.value, {}))
+        self.assertIn(GSTR1_SubCategory.SUPECOM_52.value, data)
+        self.assertIn("20ALYPD6528PQC5", data[GSTR1_SubCategory.SUPECOM_52.value])
+
+    def test_supecom_rounding_at_invoice_level(self):
+        """
+        Rounding must happen at the invoice level before aggregating across
+        invoices for the same operator. Without invoice-level rounding the
+        operator total diverges from the sum of per-invoice rounded amounts.
+        """
+        supply_type = GSTR1_SubCategory.SUPECOM_52.value
+        eco_gstin = "20ALYPD6528PQC5"
+
+        def make_item(invoice_no, igst):
+            return frappe._dict(
+                invoice_no=invoice_no,
+                ecommerce_gstin=eco_gstin,
+                taxable_value=0,
+                igst_amount=igst,
+                cgst_amount=0,
+                sgst_amount=0,
+                total_cess_amount=0,
+            )
+
+        grouped_data = {
+            supply_type: {
+                "INV-ECOM-001": [make_item("INV-ECOM-001", 0.006)],
+                "INV-ECOM-002": [make_item("INV-ECOM-002", 0.006)],
+            }
+        }
+
+        prepared_data = {}
+        BooksDataMapper().process_data_for_supecom(grouped_data, prepared_data)
+
+        row = prepared_data[supply_type][eco_gstin]
+        # Each invoice rounds to 0.01; two invoices → 0.02
+        self.assertEqual(row[inv_f.IGST], flt(0.01 + 0.01, 2))
+
+    def test_gov_excel_process_data_keeps_supecom_rows(self):
+        ecommerce_gstin = "20ALYPD6528PQC5"
+
+        books_data = {
+            "aggregate_data": {},
+            GSTR1_SubCategory.SUPECOM_52.value: [
+                {
+                    inv_f.DOC_TYPE: GSTR1_SubCategory.SUPECOM_52.value,
+                    inv_f.ECOMMERCE_GSTIN: ecommerce_gstin,
+                    inv_f.ECOMMERCE_OPERATOR_NAME: "Test Operator",
+                    inv_f.TAXABLE_VALUE: 100.0,
+                    inv_f.IGST: 18.0,
+                    inv_f.CGST: 0.0,
+                    inv_f.SGST: 0.0,
+                    inv_f.CESS: 0.0,
+                }
+            ],
+        }
+        processed = GovExcel().process_data(books_data)
+
+        self.assertIn(GovJsonKey.SUPECOM.value, processed)
+        self.assertTrue(processed[GovJsonKey.SUPECOM.value])
+
+        supecom_row = processed[GovJsonKey.SUPECOM.value][0]
+        self.assertEqual(supecom_row[inv_f.ECOMMERCE_GSTIN], ecommerce_gstin)
+        self.assertEqual(supecom_row[inv_f.ECOMMERCE_OPERATOR_NAME], "Test Operator")
+        self.assertGreater(supecom_row[inv_f.TAXABLE_VALUE], 0)
+
+    def test_supecom_excel_headers_include_operator_name(self):
+        headers = GovExcel().get_category_headers(GovJsonKey.SUPECOM.value)
+
+        operator_name_header = next(
+            header for header in headers if header.get("label") == "E-Commerce Operator Name"
+        )
+        self.assertEqual(operator_name_header.get("fieldname"), inv_f.ECOMMERCE_OPERATOR_NAME)
+
+    def test_supecom_summary_counts_rows(self):
+        for subcategory in (
+            GSTR1_SubCategory.SUPECOM_52.value,
+            GSTR1_SubCategory.SUPECOM_9_5.value,
+        ):
+            data = {
+                subcategory: [
+                    {
+                        inv_f.DOC_TYPE: subcategory,
+                        inv_f.ECOMMERCE_GSTIN: "20ALYPD6528PQC5",
+                        inv_f.TAXABLE_VALUE: 100.0,
+                        inv_f.IGST: 18.0,
+                        inv_f.CGST: 0.0,
+                        inv_f.SGST: 0.0,
+                        inv_f.CESS: 0.0,
+                    },
+                    {
+                        inv_f.DOC_TYPE: subcategory,
+                        inv_f.ECOMMERCE_GSTIN: "29AABCF8078M1C8",
+                        inv_f.TAXABLE_VALUE: 200.0,
+                        inv_f.IGST: 0.0,
+                        inv_f.CGST: 18.0,
+                        inv_f.SGST: 18.0,
+                        inv_f.CESS: 0.0,
+                    },
+                ]
+            }
+
+            summary_row = SummarizeGSTR1().get_subcategory_summary(data)[subcategory]
+
+            self.assertEqual(summary_row["no_of_records"], 2)
+            self.assertEqual(summary_row[inv_f.TAXABLE_VALUE], 300.0)
+
+            if subcategory == GSTR1_SubCategory.SUPECOM_52.value:
+                self.assertFalse(summary_row["consider_in_total_taxable_value"])
+            else:
+                self.assertTrue(summary_row["consider_in_total_taxable_value"])
+
+            self.assertFalse(summary_row["consider_in_total_tax"])
 
     def test_document_issued_summary(self):
         pass
@@ -830,9 +1221,7 @@ class TestGSTR1BooksData(FrappeTestCase):
                 "exempted_amount": 0.0,
                 "non_gst_amount": 0.0,
             },
-            data[GSTR1_SubCategory.NIL_EXEMPT.value][
-                "Intra-State supplies to registered persons"
-            ][0],
+            data[GSTR1_SubCategory.NIL_EXEMPT.value]["Intra-State supplies to registered persons"][0],
         )
 
     def test_hsn_summary_with_bifurcation(self):

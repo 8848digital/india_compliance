@@ -4,6 +4,7 @@ from frappe.utils import getdate
 from india_compliance.gst_india.report.gst_sales_register_beta.gst_sales_register_beta import (
     execute,
 )
+from india_compliance.gst_india.utils.gstr_1 import GSTR1_Category, GSTR1_SubCategory
 from india_compliance.gst_india.utils.tests import create_sales_invoice
 
 today = getdate()
@@ -579,11 +580,13 @@ INVOICES = [
                 "item_code": "_Test Nil Rated Item",
                 "rate": 500,
                 "qty": -60,
+                "allow_zero_valuation_rate": 1,
             },
             {
                 "item_code": "_Test Service Item",
                 "rate": 1500,
                 "qty": -150,
+                "allow_zero_valuation_rate": 1,
             },
         ],
     },
@@ -632,11 +635,13 @@ INVOICES = [
                 "item_code": "_Test Nil Rated Item",
                 "rate": 100,
                 "qty": -50,
+                "allow_zero_valuation_rate": 1,
             },
             {
                 "item_code": "_Test Service Item",
                 "rate": 2000,
                 "qty": -150,
+                "allow_zero_valuation_rate": 1,
             },
         ],
     },
@@ -651,7 +656,7 @@ class TestSalesRegisterBeta(FrappeTestCase):
         cls.create_test_records()
 
     @classmethod
-    @change_settings("GST Settings", {"enable_overseas_transactions": 1})
+    @change_settings("GST Settings", {"enable_overseas_transactions": 1, "enable_e_waybill": 0})
     def create_test_records(cls):
         for invoice in INVOICES:
             create_sales_invoice(**invoice)
@@ -680,3 +685,55 @@ class TestSalesRegisterBeta(FrappeTestCase):
                 if d1[key] != d2[key]:
                     standardMsg = f"{key}: {d1[key]} != {d2[key]}"
                     self.fail(standardMsg)
+
+
+class TestSalesRegisterEcommerce(FrappeTestCase):
+    """Separate class: its transaction is rolled back after the class, so the
+    committed 9(5) invoice never leaks into TestSalesRegister's positional tests."""
+
+    @change_settings(
+        "GST Settings",
+        {
+            "enable_reverse_charge_in_sales": 1,
+            "enable_sales_through_ecommerce_operators": 1,
+        },
+    )
+    def test_9_5_supply_categorisation(self):
+        si = create_sales_invoice(
+            customer="_Test Registered Customer",
+            is_reverse_charge=True,
+            is_in_state=True,
+            is_in_state_rcm=True,
+            ecommerce_gstin="20ALYPD6528PQC5",
+        )
+
+        base = {**FILTERS, "summary_by": "Summary by Item"}
+
+        def rows_for(filters):
+            return [row for row in execute(filters)[1] if row.get("invoice_no") == si.name]
+
+        rows = rows_for(base)
+        self.assertTrue(rows)
+        for row in rows:
+            self.assertEqual(row["invoice_category"], GSTR1_Category.ECOM_RCM.value)
+            self.assertFalse(row.get("invoice_sub_category"))
+            self.assertEqual(row["ecommerce_supply_type"], GSTR1_SubCategory.SUPECOM_9_5.value)
+
+        self.assertFalse(rows_for({**base, "invoice_category": GSTR1_Category.B2B.value}))
+
+        self.assertTrue(
+            rows_for(
+                {
+                    **base,
+                    "invoice_category": GSTR1_Category.SUPECOM.value,
+                    "invoice_sub_category": GSTR1_SubCategory.SUPECOM_9_5.value,
+                }
+            )
+        )
+
+        hsn_rows = rows_for({**FILTERS, "summary_by": "Summary by HSN"})
+        self.assertTrue(hsn_rows)
+        for row in hsn_rows:
+            self.assertEqual(row["invoice_category"], GSTR1_Category.ECOM_RCM.value)
+            self.assertFalse(row.get("invoice_sub_category"))
+            self.assertEqual(row["ecommerce_supply_type"], GSTR1_SubCategory.SUPECOM_9_5.value)

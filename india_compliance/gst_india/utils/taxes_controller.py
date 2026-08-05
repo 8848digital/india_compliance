@@ -1,11 +1,11 @@
 import json
 
 import frappe
-from frappe import _
-from frappe.utils.data import flt
 from erpnext.controllers.taxes_and_totals import (
     get_round_off_applicable_accounts as fetch_round_off_accounts,
 )
+from frappe import _
+from frappe.utils.data import flt
 
 from india_compliance.gst_india.overrides.transaction import (
     ItemGSTDetails,
@@ -45,7 +45,10 @@ def update_gst_details(doc, method=None):
 
 
 @frappe.whitelist()
-def set_item_wise_tax_rates(doc, item_name=None, tax_name=None):
+def set_item_wise_tax_rates(doc: str, item_name: str | None = None, tax_name: str | None = None):
+    """
+    Permission check not required as it processes client-provided data.
+    """
     doc = json.loads(doc, object_hook=frappe._dict)
     CustomTaxController(doc).set_item_wise_tax_rates(item_name, tax_name)
 
@@ -53,7 +56,6 @@ def set_item_wise_tax_rates(doc, item_name=None, tax_name=None):
 
 
 class CustomTaxController:
-
     def __init__(self, doc, field_map=None):
         """
         example_field_map = {
@@ -86,14 +88,18 @@ class CustomTaxController:
 
         for tax in taxes:
             if tax.charge_type == "Actual":
+                # User may set item_wise_tax_rates manually for Actual; only default it.
                 if not tax.item_wise_tax_rates:
                     tax.item_wise_tax_rates = "{}"
 
                 continue
 
-            item_wise_tax_rates = (
-                json.loads(tax.item_wise_tax_rates) if tax.item_wise_tax_rates else {}
-            )
+            if not items:
+                # No items to rate: clear any stale per-item rates; skip the rate lookup.
+                tax.item_wise_tax_rates = "{}"
+                continue
+
+            item_wise_tax_rates = json.loads(tax.item_wise_tax_rates) if tax.item_wise_tax_rates else {}
 
             for item in items:
                 key = f"{item.item_tax_template},{tax.account_head}"
@@ -110,18 +116,16 @@ class CustomTaxController:
     def update_tax_amount(self):
         total_taxes = 0
         total_taxable_value = self.calculate_total_taxable_value()
-        round_off_accounts = fetch_round_off_accounts(self.doc.company, [])
+        round_off_accounts = fetch_round_off_accounts(self.doc.company, [], self.doc)
 
         for tax in self.doc.taxes:
             if tax.charge_type == "Actual":
-                continue
+                tax.tax_amount = flt(tax.tax_amount)
+            else:
+                tax.tax_amount = self.get_tax_amount(tax.item_wise_tax_rates, tax.charge_type)
 
-            tax.tax_amount = self.get_tax_amount(
-                tax.item_wise_tax_rates, tax.charge_type
-            )
-
-            if tax.account_head in round_off_accounts:
-                tax.tax_amount = round(tax.tax_amount, 0)
+                if tax.account_head in round_off_accounts:
+                    tax.tax_amount = round(tax.tax_amount, 0)
 
             total_taxes += tax.tax_amount
             tax.base_total = total_taxes + total_taxable_value
@@ -170,14 +174,8 @@ class CustomTaxController:
         Returns items and taxes to update based on item_name and tax_name passed.
         If item_name and tax_name are not passed, all items and taxes are returned.
         """
-        items = (
-            self.doc.get("items", {"name": item_name})
-            if item_name
-            else self.doc.get("items")
-        )
-        taxes = (
-            self.doc.get("taxes", {"name": tax_name}) if tax_name else self.doc.taxes
-        )
+        items = self.doc.get("items", {"name": item_name}) if item_name else self.doc.get("items")
+        taxes = self.doc.get("taxes", {"name": tax_name}) if tax_name else self.doc.taxes
 
         return items, taxes
 
@@ -187,11 +185,7 @@ class CustomTaxController:
 
         tax_amount = 0
         for item in self.doc.get("items"):
-            multiplier = (
-                item.qty
-                if charge_type == "On Item Quantity"
-                else item.taxable_value / 100
-            )
+            multiplier = item.qty if charge_type == "On Item Quantity" else item.taxable_value / 100
             tax_amount += flt(item_wise_tax_rates.get(item.name, 0)) * multiplier
 
         return tax_amount
@@ -218,8 +212,4 @@ def validate_taxes(doc):
             continue
 
         if tax.account_head not in gst_accounts:
-            frappe.throw(
-                _("Row #{0}: Only GST accounts are allowed in {1}.").format(
-                    tax.idx, doc.doctype
-                )
-            )
+            frappe.throw(_("Row #{0}: Only GST accounts are allowed in {1}.").format(tax.idx, doc.doctype))

@@ -1,7 +1,7 @@
 import re
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests.utils import FrappeTestCase, change_settings
 from frappe.utils import add_to_date, getdate
 from frappe.utils.data import format_date
 
@@ -87,9 +87,7 @@ class TestTransactionData(FrappeTestCase):
 
         self.assertRaisesRegex(
             frappe.exceptions.ValidationError,
-            re.compile(
-                r"^(Postal Code for Address.* must be a 6-digit number and cannot start with 0)$"
-            ),
+            re.compile(r"^(Postal Code for Address.* must be a 6-digit number and cannot start with 0)$"),
             GSTTransactionData(doc).check_missing_address_fields,
             address,
         )
@@ -111,15 +109,14 @@ class TestTransactionData(FrappeTestCase):
                 "city": "Test City",
                 "pincode": 380015,
                 "country_code": None,
+                "gst_category": "Registered Regular",
             },
         )
 
     def test_validate_transaction(self):
         post_date = add_to_date(getdate(), days=1)
 
-        doc = create_sales_invoice(
-            posting_date=post_date, set_posting_time=True, do_not_submit=True
-        )
+        doc = create_sales_invoice(posting_date=post_date, set_posting_time=True, do_not_submit=True)
 
         self.assertRaisesRegex(
             frappe.exceptions.ValidationError,
@@ -149,6 +146,7 @@ class TestTransactionData(FrappeTestCase):
         )
 
         gst_transaction_data = GSTTransactionData(doc)
+        gst_transaction_data.item_details_list = self.get_all_item_details()
         gst_transaction_data.set_transaction_details()
 
         self.assertDictEqual(
@@ -159,7 +157,6 @@ class TestTransactionData(FrappeTestCase):
                 "date": format_date(frappe.utils.today(), "dd/mm/yyyy"),
                 "total": 100.0,
                 "total_taxable_value": 100.0,
-                "total_non_taxable_value": 0.0,
                 "rounding_adjustment": 0.0,
                 "grand_total": 118.0,
                 "grand_total_in_foreign_currency": "",
@@ -172,6 +169,7 @@ class TestTransactionData(FrappeTestCase):
                 "total_cess_amount": 0,
                 "total_cess_non_advol_amount": 0,
                 "other_charges": 0.0,
+                "pos_state_code": doc.place_of_supply.split("-")[0],
             },
         )
 
@@ -192,6 +190,7 @@ class TestTransactionData(FrappeTestCase):
         doc.save()
 
         gst_transaction_data = GSTTransactionData(doc)
+        gst_transaction_data.item_details_list = self.get_all_item_details()
         gst_transaction_data.set_transaction_details()
 
         self.assertDictEqual(
@@ -202,7 +201,6 @@ class TestTransactionData(FrappeTestCase):
                 "date": format_date(frappe.utils.today(), "dd/mm/yyyy"),
                 "total": 100.0,
                 "total_taxable_value": 100.0,
-                "total_non_taxable_value": 0.0,
                 "rounding_adjustment": -0.18,
                 "grand_total": 119.0,
                 "grand_total_in_foreign_currency": "",
@@ -215,6 +213,7 @@ class TestTransactionData(FrappeTestCase):
                 "total_igst_amount": 0,
                 "total_cess_amount": 0,
                 "total_cess_non_advol_amount": 0,
+                "pos_state_code": doc.place_of_supply.split("-")[0],
             },
         )
 
@@ -239,6 +238,16 @@ class TestTransactionData(FrappeTestCase):
             },
         )
 
+    def test_set_transporter_details_with_long_name(self):
+        """Transporter name exceeding 100 chars should be truncated; invalid chars stripped"""
+        long_name = "A" * 105 + '"\\'  # 107 chars with invalid chars
+        doc = create_sales_invoice(vehicle_no="GJ07DL9009", transporter_name=long_name, do_not_submit=True)
+
+        gst_transaction_data = GSTTransactionData(doc)
+        gst_transaction_data.set_transporter_details()
+
+        self.assertEqual(gst_transaction_data.transaction_details["transporter_name"], "A" * 100)
+
     def test_get_all_item_details(self):
         """Assertion for all Item Details fetched from transaction docs"""
         doc = create_sales_invoice(do_not_submit=True)
@@ -249,7 +258,8 @@ class TestTransactionData(FrappeTestCase):
                 {
                     "item_no": 1,
                     "qty": 1.0,
-                    "taxable_value": 100.0,
+                    "taxable_amount": 0,
+                    "non_taxable_amount": 100.0,
                     "hsn_code": "61149090",
                     "item_name": "Test Trading Goods 1",
                     "uom": "NOS",
@@ -282,7 +292,8 @@ class TestTransactionData(FrappeTestCase):
                 {
                     "item_no": 1,
                     "qty": 2.0,
-                    "taxable_value": 200.0,
+                    "taxable_amount": 200.0,
+                    "non_taxable_amount": 0,
                     "hsn_code": "61149090",
                     "item_name": "Test Trading Goods 1",
                     "uom": "NOS",
@@ -302,6 +313,50 @@ class TestTransactionData(FrappeTestCase):
                 }
             ],
         )
+
+    @change_settings("System Settings", {"currency_precision": 3})
+    def test_transaction_total_equals_sum_of_rounded_item_values(self):
+        """transaction_details.total must equal Σ rounded(item.taxable_value).
+
+        3 items at rate=3112.5, qty=2, GST 18% included in rate:
+          taxable_value per item = 6225 / 1.18 = 5275.4237...
+          Σ round(5275.4237) = 5275.42 * 3 = 15826.26  ← correct (portal expects this)
+          round(Σ 5275.4237) = round(15826.271) = 15826.27  ← old total
+        """
+        doc = create_sales_invoice(do_not_save=True)
+        doc.items[0].rate = 3112.5
+        doc.items[0].qty = 2
+        for _ in range(2):
+            append_item(doc, frappe._dict(rate=3112.5, qty=2))
+        _append_taxes(doc, ["CGST", "SGST"], included_in_print_rate=1)
+        doc.save()
+
+        gst_data = GSTTransactionData(doc)
+        gst_data.set_transaction_details()
+        items = gst_data.get_all_item_details()
+
+        item_sum = sum(it["taxable_amount"] + it["non_taxable_amount"] for it in items)
+        self.assertEqual(item_sum, gst_data.transaction_details["total"])
+        self.assertEqual(gst_data.transaction_details["total"], 15826.26)
+
+    @change_settings("System Settings", {"currency_precision": 3})
+    def test_grouped_items_total_matches_transaction_total(self):
+        doc = create_sales_invoice(do_not_save=True)
+        doc.items[0].rate = 3112.5
+        doc.items[0].qty = 2
+        append_item(doc, frappe._dict(rate=3112.5, qty=2))
+        _append_taxes(doc, ["CGST", "SGST"], included_in_print_rate=1)
+        doc.group_same_items = True
+        doc.save()
+
+        gst_data = GSTTransactionData(doc)
+        gst_data.set_transaction_details()
+        items = gst_data.get_all_item_details()
+
+        item_sum = sum(it["taxable_amount"] + it["non_taxable_amount"] for it in items)
+        self.assertEqual(len(items), 1)  # grouped into 1 row
+        self.assertEqual(item_sum, gst_data.transaction_details["total"])
+        self.assertEqual(gst_data.transaction_details["total"], 10550.84)
 
     def test_validate_unique_hsn_and_uom(self):
         doc = create_sales_invoice(do_not_submit=True)

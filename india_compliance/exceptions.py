@@ -1,9 +1,10 @@
-import frappe
+from frappe import ValidationError
 
 
-class GSPServerError(frappe.ValidationError):
+class GSPServerError(ValidationError):
     message = "GSP/GST server is down"
     title = "GSP/GST Server Error"
+
 
 class GSPLimitExceededError(GSPServerError):
     message = "GSP/GST account limit exceeded"
@@ -29,3 +30,19 @@ class InvalidOTPError(Exception):
 class InvalidAuthTokenError(Exception):
     def __init__(self, message="Invalid Auth Token", *args, **kwargs):
         super().__init__(message, *args, **kwargs)
+
+
+class NotApplicableError(ValidationError):
+    """
+    Raised when e-Invoice/e-Waybill is not applicable for the document.
+    """
+
+    pass
+
+
+class AlreadyGeneratedError(ValidationError):
+    """
+    Raised when e-Invoice/e-Waybill has already been generated for the document.
+    """
+
+    pass

@@ -1,7 +1,32 @@
 import frappe
-from frappe.utils import getdate
+from erpnext.controllers.subcontracting_controller import make_rm_stock_entry
+from erpnext.subcontracting.doctype.subcontracting_order.test_subcontracting_order import (
+    create_subcontracting_order,
+)
+from frappe.utils import add_days, getdate, today
 
 from india_compliance.gst_india.constants import SALES_DOCTYPES
+from india_compliance.gst_india.utils import get_gst_accounts_by_type
+from india_compliance.tests.erpnext_test_utils import create_subcontracting_order
+
+SUBCONTRACTING_TEST_RM_ITEM_1 = "Subcontracted SRM Item 1"
+SUBCONTRACTING_TEST_RM_ITEM_2 = "Subcontracted SRM Item 2"
+SUBCONTRACTING_TEST_SERVICE_ITEM = "Subcontracted Service Item 1"
+SUBCONTRACTING_TEST_FINISHED_ITEM = "Subcontracted Item SA1"
+SUBCONTRACTING_TEST_FINISHED_ITEM_2 = "Subcontracted Item SA2"
+SUBCONTRACTING_TEST_FINISHED_ITEM_TG = "Subcontracted Item Trading Goods"
+
+# Values differ from the defaults, so that each field is seen as changed
+TRANSPORTER_DETAILS = {
+    "transporter": "_Test Common Supplier",
+    "gst_transporter_id": "05AAACG2140A1ZL",
+    "lr_no": "_Test Transport Receipt",
+    "lr_date": add_days(today(), -1),
+    "vehicle_no": "GJ01AA1234",
+    "distance": 10,
+    "mode_of_transport": "Rail",
+    "gst_vehicle_type": "Over Dimensional Cargo (ODC)",
+}
 
 
 def create_sales_invoice(**data):
@@ -18,10 +43,75 @@ def create_purchase_invoice(**data):
     return create_transaction(**data)
 
 
+def create_journal_entry(**data):
+    data = frappe._dict(data)
+    data["doctype"] = "Journal Entry"
+
+    return create_transaction(**data)
+
+
+def create_itc_reversal_journal_entry(**data):
+    """
+    Create an ITC Reversal Journal Entry.
+    """
+    data = frappe._dict(data)
+    if not data.get("voucher_type"):
+        data["voucher_type"] = "Reversal Of ITC"
+
+    if not data.get("ineligibility_reason"):
+        data["ineligibility_reason"] = "As per rules 42 & 43 of CGST Rules"
+
+    if not data.get("accounts") and data.get("tax_amount"):
+        data["accounts"] = get_itc_journal_accounts(data)
+
+    data.pop("tax_amount", None)
+
+    return create_journal_entry(**data)
+
+
+def create_itc_reclaim_journal_entry(**data):
+    """
+    Create an ITC Reclaim Journal Entry.
+    """
+    data = frappe._dict(data)
+    if not data.get("voucher_type"):
+        data["voucher_type"] = "Reclaim of ITC Reversal"
+
+    if not data.get("accounts") and data.get("tax_amount"):
+        data["accounts"] = get_itc_journal_accounts(data)
+
+    data.pop("tax_amount", None)
+
+    return create_journal_entry(**data)
+
+
+def get_itc_journal_accounts(data):
+    tax_amount = data.tax_amount
+    company = data.company or "_Test Indian Registered Company"
+    company_abbr = frappe.get_cached_value("Company", company, "abbr")
+    is_reclaim = data.get("voucher_type") == "Reclaim of ITC Reversal"
+    gst_accounts = get_gst_accounts_by_type(company, "Input")
+
+    return [
+        {
+            "account": f"GST Expense - {company_abbr}",
+            "credit_in_account_currency" if is_reclaim else "debit_in_account_currency": tax_amount * 2,
+        },
+        {
+            "account": gst_accounts.cgst_account,
+            "debit_in_account_currency" if is_reclaim else "credit_in_account_currency": tax_amount,
+        },
+        {
+            "account": gst_accounts.sgst_account,
+            "debit_in_account_currency" if is_reclaim else "credit_in_account_currency": tax_amount,
+        },
+    ]
+
+
 def create_transaction(**data):
     data = frappe._dict(data)
     transaction = frappe.get_doc(data)
-    transaction.currency = "INR"
+
     if not transaction.company:
         transaction.company = "_Test Indian Registered Company"
 
@@ -79,12 +169,62 @@ def create_transaction(**data):
         _append_taxes(transaction, "IGST RCM", company_abbr, rate=18)
 
     if not data.do_not_save:
-        transaction.insert(ignore_permissions=True)
+        transaction.insert()
 
         if not data.do_not_submit:
             transaction.submit()
 
     return transaction
+
+
+def make_subcontracting_stock_entry(**data):
+    data = frappe._dict(data)
+    do_not_save = data.pop("do_not_save", False)
+    do_not_submit = data.pop("do_not_submit", False)
+    data.pop("items", None)  # always derived from SCO supplied_items
+
+    purchase_order = create_transaction(
+        doctype="Purchase Order",
+        is_subcontracted=1,
+        item_code=SUBCONTRACTING_TEST_SERVICE_ITEM,
+        qty=1,
+        rate=100,
+        fg_item=SUBCONTRACTING_TEST_FINISHED_ITEM,
+        fg_item_qty=1,
+        supplier_warehouse="Finished Goods - _TIRC",
+    )
+    subcontracting_order = create_subcontracting_order(po_name=purchase_order.name)
+
+    items = [
+        {
+            "item_code": row.main_item_code,
+            "rm_item_code": row.rm_item_code,
+            "qty": row.required_qty,
+            "rate": row.rate,
+            "stock_uom": row.stock_uom,
+            "warehouse": row.reserve_warehouse,
+        }
+        for row in subcontracting_order.supplied_items
+    ]
+
+    stock_entry = frappe.get_doc(make_rm_stock_entry(subcontracting_order.name, items))
+    stock_entry.update(data)
+
+    if "bill_from_address" not in data and not stock_entry.get("bill_from_address"):
+        stock_entry.bill_from_address = "_Test Indian Registered Company-Billing"
+
+    if "bill_to_address" not in data and not stock_entry.get("bill_to_address"):
+        stock_entry.bill_to_address = "_Test Registered Supplier-Billing"
+
+    if do_not_save:
+        return stock_entry
+
+    stock_entry.insert()
+
+    if do_not_submit:
+        return stock_entry
+
+    return stock_entry.submit()
 
 
 def append_item(transaction, data=None, company_abbr="_TIRC"):
@@ -93,6 +233,8 @@ def append_item(transaction, data=None, company_abbr="_TIRC"):
 
     if data.doctype in ["Payment Entry", "Journal Entry"]:
         return
+
+    allow_zero_valuation_rate = 1 if data.get("is_return") else 0
 
     return transaction.append(
         "items",
@@ -110,6 +252,7 @@ def append_item(transaction, data=None, company_abbr="_TIRC"):
             "taxable_value": data.taxable_value or 0,
             "fg_item": data.fg_item,
             "fg_item_qty": data.fg_item_qty,
+            "allow_zero_valuation_rate": allow_zero_valuation_rate,
         },
     )
 

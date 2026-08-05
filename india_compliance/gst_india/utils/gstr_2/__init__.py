@@ -17,7 +17,7 @@ from india_compliance.gst_india.doctype.gst_return_log.gst_return_log import (
 from india_compliance.gst_india.doctype.gstr_import_log.gstr_import_log import (
     create_import_log,
 )
-from india_compliance.gst_india.utils import get_party_for_gstin
+from india_compliance.gst_india.utils import get_party_for_gstin, validate_gstin_permission
 from india_compliance.gst_india.utils.gstr_2 import gstr_2a, gstr_2b, ims
 from india_compliance.gst_india.utils.gstr_utils import ReturnType
 
@@ -38,6 +38,12 @@ class GSTRCategory(Enum):
     B2BDN = "B2BDN"
     B2BDNA = "B2BDNA"
 
+    # GSTR 2A only
+    ECOM = "ECOM"
+    ECOMA = "ECOMA"
+    TDS = "TDS"
+    TCS = "TCS"
+
 
 GSTR_2A_ACTIONS = {
     "B2B": GSTRCategory.B2B,
@@ -47,6 +53,10 @@ GSTR_2A_ACTIONS = {
     "ISD": GSTRCategory.ISD,
     "IMPG": GSTRCategory.IMPG,
     "IMPGSEZ": GSTRCategory.IMPGSEZ,
+    "ECOM": GSTRCategory.ECOM,
+    "ECOMA": GSTRCategory.ECOMA,
+    "TDS": GSTRCategory.TDS,
+    "TCS": GSTRCategory.TCS,
 }
 
 IMS_ACTIONS = {
@@ -67,8 +77,10 @@ GSTR_MODULES = {
 
 IMPORT_CATEGORY = ("IMPG", "IMPGSEZ")
 
+NON_RECONCILE_CATEGORY = ("TDS", "TCS")
 
-def download_gstr_2a(gstin, return_periods, gst_categories=None):
+
+def download_gstr_2a(gstin, return_periods):
     total_expected_requests = len(return_periods) * len(GSTR_2A_ACTIONS)
     requests_made = 0
     queued_message = False
@@ -92,9 +104,6 @@ def download_gstr_2a(gstin, return_periods, gst_categories=None):
                 },
                 user=frappe.session.user,
             )
-
-            if gst_categories and category.value not in gst_categories:
-                continue
 
             response = api.get_data(action, return_period)
 
@@ -175,9 +184,7 @@ def download_gstr_2b(gstin, return_periods):
             break
 
         if response.error_type == "no_docs_found":
-            create_import_log(
-                gstin, ReturnType.GSTR2B.value, return_period, data_not_found=True
-            )
+            create_import_log(gstin, ReturnType.GSTR2B.value, return_period, data_not_found=True)
             continue
 
         if response.error_type == "not_applicable":
@@ -282,11 +289,7 @@ def download_ims_invoices(gstin, for_upload=False):
 
 def save_gstr_2a(gstin, return_period, json_data):
     return_type = ReturnType.GSTR2A
-    if (
-        not json_data
-        or json_data.get("gstin") != gstin
-        or json_data.get("fp") != return_period
-    ):
+    if not json_data or json_data.get("gstin") != gstin or json_data.get("fp") != return_period:
         frappe.throw(
             _(
                 "Data received seems to be invalid from the GST Portal. Please try"
@@ -299,9 +302,7 @@ def save_gstr_2a(gstin, return_period, json_data):
         if action.lower() not in json_data:
             continue
 
-        create_import_log(
-            gstin, return_type.value, return_period, classification=category.value
-        )
+        create_import_log(gstin, return_type.value, return_period, classification=category.value)
 
         # making consistent with GSTR2b
         json_data[category.value.lower()] = json_data.pop(action.lower())
@@ -391,8 +392,7 @@ def update_import_history(return_periods):
         .where(log.data_not_found == 1)
         .where(
             Criterion.any(
-                (log.return_period == doc.return_period)
-                & (log.classification == doc.classification)
+                (log.return_period == doc.return_period) & (log.classification == doc.classification)
                 for doc in inward_supplies
             )
         )
@@ -458,8 +458,9 @@ def end_transaction_progress(return_period):
 
 
 @frappe.whitelist()
+@validate_gstin_permission
 @otp_handler
-def regenerate_gstr_2b(gstin, return_period, doctype):
+def regenerate_gstr_2b(gstin: str, return_period: str, doctype: str):
     frappe.has_permission(doctype, throw=True)
 
     try:
@@ -468,13 +469,12 @@ def regenerate_gstr_2b(gstin, return_period, doctype):
 
     except frappe.ValidationError as e:
         frappe.clear_last_message()
-        frappe.throw(
-            str(e), title=_("GSTR 2B Regeneration Failed for {0}").format(return_period)
-        )
+        frappe.throw(str(e), title=_("GSTR 2B Regeneration Failed for {0}").format(return_period))
 
 
 @frappe.whitelist()
-def check_regenerate_status(gstin, reference_id, doctype):
+@validate_gstin_permission
+def check_regenerate_status(gstin: str, reference_id: str, doctype: str):
     frappe.has_permission(doctype, throw=True)
 
     if not reference_id:
