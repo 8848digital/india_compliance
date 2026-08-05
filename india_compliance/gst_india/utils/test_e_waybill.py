@@ -15,17 +15,10 @@ from frappe.www.printview import get_html_and_style
 from responses import matchers
 
 from india_compliance.gst_india.api_classes.base import BASE_URL
-<<<<<<< HEAD
-from india_compliance.gst_india.constants import SERVICE_HSN_PREFIX
-from india_compliance.gst_india.constants.e_waybill import (
-    E_WAYBILL_CHANGES_APPLICABLE_DATE,
-=======
 from india_compliance.gst_india.constants import (
     SERVICE_HSN_PREFIX,
     SHIP_TO_GSTIN_APPLICABLE_DATE,
->>>>>>> 986aea0b (fix: gate all the changes and minor refactor)
 )
-from india_compliance.gst_india.constants.e_waybill import SUB_SUPPLY_TYPES
 from india_compliance.gst_india.overrides.sales_invoice import (
     is_e_waybill_applicable,
 )
@@ -52,20 +45,12 @@ from india_compliance.gst_india.utils.e_waybill import (
     update_vehicle_info,
 )
 from india_compliance.gst_india.utils.tests import (
+    SUBCONTRACTING_TEST_FINISHED_ITEM_TG,
     _append_taxes,
     append_item,
     create_purchase_invoice,
     create_sales_invoice,
     create_transaction,
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-    create_unregistered_shipping_address,
-=======
->>>>>>> ac683b7b (fix: changes as per review)
-    make_subcontracting_inward_delivery,
-    make_subcontracting_inward_rm_return,
->>>>>>> 4e5ad9e3 (feat: implement handling of mandatory ship-to gstin for e-invoice)
     make_subcontracting_stock_entry,
 )
 
@@ -1400,10 +1385,10 @@ class TestEWaybill(FrappeTestCase):
         si = create_sales_invoice(
             vehicle_no="GJ07DL9009",
             company_address="_Test Indian Registered Company-Billing",
-            dispatch_address_name="_Test Indian Registered Company-Shipping",  # ship-from differs
+            dispatch_address_name="_Test Indian Registered Company-Shipping",
             customer="_Test Registered Customer",
             customer_address="_Test Registered Customer-Billing",
-            shipping_address_name="_Test Unregistered Consignee-Shipping",  # ship-to differs
+            shipping_address_name="_Test Unregistered Consignee-Shipping",
             is_in_state=1,
             distance=10,
             transporter="_Test Common Supplier",
@@ -1456,7 +1441,7 @@ class TestEWaybill(FrappeTestCase):
         si = create_sales_invoice(
             vehicle_no="GJ07DL9009",
             company_address="_Test Indian Registered Company-Billing",
-            dispatch_address_name="_Test Indian Registered Company-Shipping",  # ship-from differs
+            dispatch_address_name="_Test Indian Registered Company-Shipping",
             customer="_Test Registered Customer",
             customer_address="_Test Registered Customer-Billing",
             # different address, same GSTIN as the billing address
@@ -1777,7 +1762,8 @@ class TestEWaybill(FrappeTestCase):
         invoice_args = self.e_waybill_test_data.get(test_case).get("kwargs")
         invoice_args.update(
             {
-                "transporter": "_Test Common Supplier",
+                # used this supplier to match the mocked response without `transporterId`
+                "transporter": "_Test Transporter Without GST ID",
                 "distance": 10,
                 "mode_of_transport": "Road",
             }
@@ -1787,7 +1773,6 @@ class TestEWaybill(FrappeTestCase):
         update_dates_for_test_data(self.e_waybill_test_data)
 
         si = create_sales_invoice(**invoice_args, do_not_submit=True)
-        si.gst_transporter_id = ""
         si.submit()
 
         return si
@@ -1802,14 +1787,15 @@ class TestEWaybill(FrappeTestCase):
 
     def _create_stock_entry(self, test_case):
         """Generate Stock Entry to test e-Waybill functionalities"""
-        doc_args = self.e_waybill_test_data.get(test_case).get("kwargs")
+        doc_args = frappe._dict(self.e_waybill_test_data.get(test_case).get("kwargs"))
         if doc_args.get("purpose") == "Send to Subcontractor":
-            return make_subcontracting_stock_entry(**doc_args)
+            return make_subcontracting_stock_entry(
+                fg_item=SUBCONTRACTING_TEST_FINISHED_ITEM_TG,
+                **doc_args,
+            )
 
-        doc_args.update({"doctype": "Stock Entry"})
-
-        stock_entry = create_transaction(**doc_args)
-        return stock_entry
+        doc_args["doctype"] = "Stock Entry"
+        return create_transaction(**doc_args)
 
     def _create_purchase_receipt(self, test_case):
         """Generate Purchase Receipt to test e-Waybill functionalities"""
